@@ -1,9 +1,15 @@
 #include <winres.h>
 #include <commctrl.h>
 #include "resource.h"
+#include "gen-versioninfo.h"
 
-LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
-#pragma code_page(932)
+#define STRINGIZE_NO_EXPANSION(x) #x
+#define STRINGIZE(x) STRINGIZE_NO_EXPANSION(x)
+#define TOKEN_PASTE_VERSION(h,a,b,c,d,t) h##a.b.c##t
+#define MAKE_VERSION_STRING(x) STRINGIZE(TOKEN_PASTE_VERSION(ITaskMgr/,x,\r\n\xA9 2003-2022 IshiSoft et al.))
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+#pragma code_page(1252)
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -68,7 +74,7 @@ CAPTION "About ITaskMgr..."
 FONT 9, "System"
 BEGIN
     ICON            IDI_MAIN,IDC_STATIC,5,5,20,20
-    LTEXT           "ITaskMgr/1.0\r\nCopyright (C) 2003 IshiSoft",IDC_STATIC,
+    LTEXT           MAKE_VERSION_STRING(GEN_VER_DIGITAL_VERSION), IDC_STATIC,
                     30,5,100,20
     LTEXT           "http://www001.upp.so-net.ne.jp/ishi/",IDC_STATIC,5,26,
                     129,10
@@ -83,4 +89,46 @@ BEGIN
                     WS_BORDER | WS_TABSTOP,0,0,150,90
     PUSHBUTTON      "Switch",IDC_TASK_SWITCH,110,95,35,15
     PUSHBUTTON      "Close",IDC_TASK_CLOSE,70,95,35,15
+END
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Version
+//
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION GEN_VER_DIGITAL_VERSION
+ PRODUCTVERSION GEN_VER_DIGITAL_VERSION
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x40004L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904E4"
+        BEGIN
+            VALUE "Comments", "https://github.com/datadiode/UTIL-PROCESS-ITaskMgr\0"
+            VALUE "CompanyName", "Yuichiro Ishitani et al.\0"
+            VALUE "FileDescription", "regedt33\0"
+            VALUE "FileVersion", GEN_VER_VERSION_STRING
+            VALUE "InternalName", "regedt33\0"
+            VALUE "LegalCopyright", "BSD-3-Clause\0"
+            VALUE "LegalTrademarks", "\0"
+            VALUE "OriginalFilename", "regedt33.exe\0"
+            VALUE "PrivateBuild", "\0"
+            VALUE "ProductName", "regedt33\0"
+            VALUE "ProductVersion", GEN_VER_VERSION_STRING
+            VALUE "SpecialBuild", "\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
 END

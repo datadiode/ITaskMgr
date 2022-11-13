@@ -116,7 +116,7 @@ INT_PTR CALLBACK DlgProcTask(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 		case IDC_TASK_SWITCH:
 			if( hwndTarget )
 			{
-				ShowWindow(pTP->hDlg, SW_HIDE);
+				ShowWindow(pTP->hDlg, SW_MINIMIZE);
 				SetForegroundWindow(hwndTarget);
 			}
 			break;

@@ -1,0 +1,30 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 10.00
+# Visual Studio 2008
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ITaskMgr_vc9", "ITaskMgr_vc9.vcproj", "{0D9E236A-4B3A-441B-A0BE-D6431FB21602}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Beckhoff_HMI_600 (ARMV4I) = Debug|Beckhoff_HMI_600 (ARMV4I)
+		Debug|Beckhoff_HMI_600 (x86) = Debug|Beckhoff_HMI_600 (x86)
+		Release|Beckhoff_HMI_600 (ARMV4I) = Release|Beckhoff_HMI_600 (ARMV4I)
+		Release|Beckhoff_HMI_600 (x86) = Release|Beckhoff_HMI_600 (x86)
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0D9E236A-4B3A-441B-A0BE-D6431FB21602}.Debug|Beckhoff_HMI_600 (ARMV4I).ActiveCfg = Debug|Beckhoff_HMI_600 (ARMV4I)
+		{0D9E236A-4B3A-441B-A0BE-D6431FB21602}.Debug|Beckhoff_HMI_600 (ARMV4I).Build.0 = Debug|Beckhoff_HMI_600 (ARMV4I)
+		{0D9E236A-4B3A-441B-A0BE-D6431FB21602}.Debug|Beckhoff_HMI_600 (ARMV4I).Deploy.0 = Debug|Beckhoff_HMI_600 (ARMV4I)
+		{0D9E236A-4B3A-441B-A0BE-D6431FB21602}.Debug|Beckhoff_HMI_600 (x86).ActiveCfg = Debug|Beckhoff_HMI_600 (x86)
+		{0D9E236A-4B3A-441B-A0BE-D6431FB21602}.Debug|Beckhoff_HMI_600 (x86).Build.0 = Debug|Beckhoff_HMI_600 (x86)
+		{0D9E236A-4B3A-441B-A0BE-D6431FB21602}.Debug|Beckhoff_HMI_600 (x86).Deploy.0 = Debug|Beckhoff_HMI_600 (x86)
+		{0D9E236A-4B3A-441B-A0BE-D6431FB21602}.Release|Beckhoff_HMI_600 (ARMV4I).ActiveCfg = Release|Beckhoff_HMI_600 (ARMV4I)
+		{0D9E236A-4B3A-441B-A0BE-D6431FB21602}.Release|Beckhoff_HMI_600 (ARMV4I).Build.0 = Release|Beckhoff_HMI_600 (ARMV4I)
+		{0D9E236A-4B3A-441B-A0BE-D6431FB21602}.Release|Beckhoff_HMI_600 (ARMV4I).Deploy.0 = Release|Beckhoff_HMI_600 (ARMV4I)
+		{0D9E236A-4B3A-441B-A0BE-D6431FB21602}.Release|Beckhoff_HMI_600 (x86).ActiveCfg = Release|Beckhoff_HMI_600 (x86)
+		{0D9E236A-4B3A-441B-A0BE-D6431FB21602}.Release|Beckhoff_HMI_600 (x86).Build.0 = Release|Beckhoff_HMI_600 (x86)
+		{0D9E236A-4B3A-441B-A0BE-D6431FB21602}.Release|Beckhoff_HMI_600 (x86).Deploy.0 = Release|Beckhoff_HMI_600 (x86)
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

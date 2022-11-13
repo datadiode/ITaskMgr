@@ -1,6 +1,5 @@
 #include "stdafx.h"
 #include "ITaskMgr.h"
-#include "process.h"
 
 static SIZE_T CalcHeapOfProcess(DWORD dwProcessID);
 static BOOL DeleteProcessItem(HWND hwndLView, DWORD* pdwProcessIDs);

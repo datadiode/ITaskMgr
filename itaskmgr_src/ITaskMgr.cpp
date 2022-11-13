@@ -14,8 +14,8 @@ INT_PTR CALLBACK DlgProcTask(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
 #define MAIN_DLG_CX 280
 #endif
 
-static BOOL CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
-static BOOL CALLBACK DlgProcHelp(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
+static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
+static INT_PTR CALLBACK DlgProcHelp(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
 
 static BOOL CreateTab(ThreadPack* pTP);
 static BOOL CreateIcon(ThreadPack* pTP);
@@ -61,7 +61,7 @@ int WINAPI _tWinMain(	HINSTANCE hInstance,
 
 
 	// g_hInst = hInstance;
-	DialogBox(hInstance, MAKEINTRESOURCE(IDD_MAINDLG), NULL, (DLGPROC)DlgProc);
+	DialogBox(hInstance, MAKEINTRESOURCE(IDD_MAINDLG), NULL, DlgProc);
     return 0;
 }
 static struct shellapi {
@@ -79,7 +79,7 @@ static struct shellapi {
 //-----------------------------------------------------------------------------
 // main dialog
 //-----------------------------------------------------------------------------
-static BOOL CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
+static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
 	static ThreadPack* pTP = NULL;
 	LPNMHDR lpnmhdr;
@@ -232,25 +232,20 @@ static BOOL CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 		}
 		break;
 	// ----------------------------------------------------------
-	case WM_COMMAND:
-		switch(LOWORD(wParam))
+#ifdef _WIN32_WCE
+	case WM_HELP:
+		DialogBox(pTP->g_hInst, MAKEINTRESOURCE(IDD_HELP), hDlg, DlgProcHelp);
+		break;
+#else
+	case WM_SYSCOMMAND:
+		switch (wParam)
 		{
-		case IDOK:
-			return TRUE;
-		case IDCANCEL:
-			if(IsWindowVisible(hDlg) )
-			{
-				ShowWindow(hDlg, SW_HIDE);
-			}
-			// EndDialog(hDlg, 0);
+		case SC_CONTEXTHELP:
+			DialogBox(pTP->g_hInst, MAKEINTRESOURCE(IDD_HELP), hDlg, DlgProcHelp);
 			return TRUE;
 		}
 		break;
-
-	// ----------------------------------------------------------
-	case WM_HELP:
-		DialogBox(pTP->g_hInst, MAKEINTRESOURCE(IDD_HELP), hDlg, (DLGPROC)DlgProcHelp);
-
+#endif
 
 	// ----------------------------------------------------------
 	case WM_TIMER:
@@ -473,12 +468,18 @@ static DWORD GetThreadTick(FILETIME* a, FILETIME* b)
 //-----------------------------------------------------------------------------
 // about dlg proc
 //-----------------------------------------------------------------------------
-static BOOL CALLBACK DlgProcHelp(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
+static INT_PTR CALLBACK DlgProcHelp(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
 	switch(Msg)
 	{
-	case WM_CLOSE:
-		EndDialog(hDlg, 0);
+	case WM_COMMAND:
+		switch (wParam)
+		{
+		case IDOK:
+		case IDCANCEL:
+			EndDialog(hDlg, wParam);
+			break;
+		}
 		return TRUE;
 	}
 	return FALSE;

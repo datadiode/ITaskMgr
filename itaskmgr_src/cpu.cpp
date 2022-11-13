@@ -1,6 +1,5 @@
 #include "stdafx.h"
 #include "ITaskMgr.h"
-#include "cpu.h"
 
 static BOOL ShowCpuStatus(ThreadPack* pTP);
 static BOOL DrawGraph(ThreadPack* pTP, HWND hwndDraw);
@@ -8,24 +7,20 @@ static BOOL DrawGraph(ThreadPack* pTP, HWND hwndDraw);
 //-----------------------------------------------------------------------------
 // cpu graph dialog proc
 //-----------------------------------------------------------------------------
-BOOL CALLBACK DlgProcCpu(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
+INT_PTR CALLBACK DlgProcCpu(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
 	static ThreadPack* pTP = NULL;
 
 	switch(Msg)
 	{
-	case WM_THREADPACK_POINTER:
-	{
-		pTP = (ThreadPack*)wParam;
-		HWND hwndDraw = GetDlgItem(hDlg, IDC_CPU_DRAW);
-		DrawGraph(pTP, hwndDraw);
-		ShowCpuStatus(pTP);
-		return TRUE;
-	}	
 	
 	// ----------------------------------------------------------
 	case WM_INITDIALOG:
 	{
+		pTP = (ThreadPack*)lParam;
+		HWND hwndDraw = GetDlgItem(hDlg, IDC_CPU_DRAW);
+		DrawGraph(pTP, hwndDraw);
+		ShowCpuStatus(pTP);
 		return TRUE;
 	}
 	
@@ -38,7 +33,6 @@ BOOL CALLBACK DlgProcCpu(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 		HWND hwndDraw = GetDlgItem(hDlg, IDC_CPU_DRAW);
 		HWND hwndText = GetDlgItem(hDlg, IDC_CPU_TEXT);
 
-		HDWP hdwp;
 		RECT rcTab;
 		RECT rcDraw;
 		RECT rcTitle;
@@ -49,21 +43,21 @@ BOOL CALLBACK DlgProcCpu(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 		GetClientRect(hwndDraw, &rcDraw);
 		GetClientRect(hwndText, &rcTitle);
 
-		hdwp = BeginDeferWindowPos(2);
+		HDWP hdwp = BeginDeferWindowPos(2);
 		
-		DeferWindowPos(hdwp, hwndDraw, HWND_TOP
-			, 5
-			, 5
-			, rcTab.right - rcTab.left -5 -5
-			, rcTab.bottom - rcTitle.bottom -5 -5
-			, 0);
-
-		DeferWindowPos(hdwp, hwndText, HWND_TOP
-			, 5
+		hdwp = DeferWindowPos(hdwp, hwndDraw, NULL
+			, rcTab.left
+			, rcTab.top
+			, rcTab.right - rcTab.left
 			, rcTab.bottom - rcTitle.bottom
-			, rcTab.right - rcTab.left -5 -5
+			, SWP_NOZORDER);
+
+		hdwp = DeferWindowPos(hdwp, hwndText, NULL
+			, rcTab.left
+			, rcTab.bottom - rcTitle.bottom
+			, rcTab.right - rcTab.left
 			, rcTitle.bottom
-			, 0);
+			, SWP_NOZORDER);
 
 		EndDeferWindowPos(hdwp);
 		ShowCpuStatus(pTP);
@@ -116,14 +110,14 @@ static BOOL ShowCpuStatus(ThreadPack* pTP)
 	GlobalMemoryStatus(&ms);
 
 
-	DWORD dwTotalMem = ms.dwTotalPhys>>10;
-	DWORD dwUsedMem = dwTotalMem - (ms.dwAvailPhys>>10);
+	SIZE_T dwTotalMem = ms.dwTotalPhys>>10;
+	SIZE_T dwUsedMem = dwTotalMem - (ms.dwAvailPhys >> 10);
 
 	wsprintf(szFmt
 		, _T("CPU time\t%d%%\r\n")
-		  _T("Memory used\t%dKB/%dKB")
+		  _T("Memory used\t%uKB/%uKB")
 		, (int)(pTP->chPowHistory[0])
-		, dwUsedMem, dwTotalMem );
+		, (DWORD)dwUsedMem, (DWORD)dwTotalMem);
 
 	SetWindowText(hwndStatus, szFmt);
 	return TRUE;

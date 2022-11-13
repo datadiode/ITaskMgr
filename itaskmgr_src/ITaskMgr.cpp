@@ -4,11 +4,15 @@
 #include "stdafx.h"
 #include "ITaskMgr.h"
 
-#include "cpu.h"
-#include "process.h"
-#include "tasklist.h"
+INT_PTR CALLBACK DlgProcCpu(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK DlgProcProcess(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK DlgProcTask(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
 
+#ifdef _WIN32_WCE
 #define MAIN_DLG_CX 240
+#else
+#define MAIN_DLG_CX 280
+#endif
 
 static BOOL CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
 static BOOL CALLBACK DlgProcHelp(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
@@ -27,10 +31,10 @@ BOOL		g_bThreadEnd;
 //-----------------------------------------------------------------------------
 // WinMain entry point
 //-----------------------------------------------------------------------------
-int WINAPI WinMain(	HINSTANCE hInstance,
-					HINSTANCE hPrevInstance,
-					LPTSTR    lpCmdLine,
-					int       nCmdShow)
+int WINAPI _tWinMain(	HINSTANCE hInstance,
+						HINSTANCE hPrevInstance,
+						LPTSTR    lpCmdLine,
+						int       nCmdShow)
 {
 	INITCOMMONCONTROLSEX icex;
 
@@ -60,6 +64,17 @@ int WINAPI WinMain(	HINSTANCE hInstance,
 	DialogBox(hInstance, MAKEINTRESOURCE(IDD_MAINDLG), NULL, (DLGPROC)DlgProc);
     return 0;
 }
+static struct shellapi {
+	HMODULE h;
+	DllImport<BOOL(WINAPI*)(DWORD, NOTIFYICONDATA*)> Shell_NotifyIcon;
+} const shellapi = {
+#ifdef _WIN32_WCE
+	GetModuleHandle(_T("COREDLL.DLL")),
+#else
+	LoadLibrary(_T("SHELL32.DLL")),
+#endif
+	GetProcAddressA(shellapi.h, _CRT_STRINGIZE(Shell_NotifyIcon)),
+};
 
 //-----------------------------------------------------------------------------
 // main dialog
@@ -93,19 +108,6 @@ static BOOL CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 		memset(pTP->chMemHistory, -1, HISTORY_MAX);
 		pTP->chMemHistory[0] = 0;
 
-		
-		RECT rcWorkArea;
-		if( SystemParametersInfo(SPI_GETWORKAREA, 0, &rcWorkArea, FALSE) )
-		{
-			MoveWindow(hDlg
-				, (rcWorkArea.right/2) - (MAIN_DLG_CX/2)
-				, 0
-				, MAIN_DLG_CX
-				, (rcWorkArea.bottom > 240) ? 240 : rcWorkArea.bottom
-				, FALSE );
-		}
-
-		
 		if( CreateTab(pTP) == FALSE
 			|| CreateIcon(pTP) == FALSE
 			|| CreateThreads(pTP) == FALSE )
@@ -126,11 +128,22 @@ static BOOL CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 		pTP->nidTrayIcon.uFlags				= NIF_MESSAGE | NIF_ICON;
 		pTP->nidTrayIcon.uID				= 1;
 
-		Shell_NotifyIcon(NIM_ADD, &pTP->nidTrayIcon);
+		if (*shellapi.Shell_NotifyIcon)
+			(*shellapi.Shell_NotifyIcon)(NIM_ADD, &pTP->nidTrayIcon);
 
 		SetTimer(hDlg, 1, pTP->dwInterval, NULL);
 
 		ShowWindow(pTP->hwndCpupower, SW_SHOWNORMAL);
+
+		RECT rcWorkArea;
+		UINT uFlags = SystemParametersInfo(SPI_GETWORKAREA, 0, &rcWorkArea, FALSE) ? 0 : SWP_NOMOVE | SWP_NOSIZE;
+
+		SetWindowPos(hDlg, HWND_TOPMOST
+			, (rcWorkArea.right / 2) - (MAIN_DLG_CX / 2)
+			, 0
+			, MAIN_DLG_CX
+			, (rcWorkArea.bottom > 240) ? 240 : rcWorkArea.bottom
+			, 0);
 
 		return TRUE;
 	}
@@ -272,7 +285,8 @@ static BOOL CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 	// ----------------------------------------------------------
 	case WM_DESTROY:
 		KillTimer(hDlg, 1);
-		Shell_NotifyIcon(NIM_DELETE, &pTP->nidTrayIcon);
+		if (*shellapi.Shell_NotifyIcon)
+			(*shellapi.Shell_NotifyIcon)(NIM_DELETE, &pTP->nidTrayIcon);
 		g_bThreadEnd/*pTP->bEnd*/ = TRUE;
 		ResumeThread(pTP->hIdleThread);
 		WaitForSingleObject(pTP->hIdleThread, 3000);
@@ -292,18 +306,11 @@ static BOOL CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 //-----------------------------------------------------------------------------
 static BOOL CreateTab(ThreadPack* pTP)
 {
-	RECT rcDlg;
-	HWND hwndProcessList;
-	HWND hwndCpupower;
-	HWND hwndTaskList;
-
 	HWND hwndTab = GetDlgItem(pTP->hDlg, IDC_TAB);
 	pTP->hwndTab = hwndTab;
 
 	if( hwndTab == NULL )
 		return FALSE;
-
-    GetClientRect(pTP->hDlg, &rcDlg);
 
 	TCITEM tie; 
 
@@ -316,41 +323,31 @@ static BOOL CreateTab(ThreadPack* pTP)
 	if(TabCtrl_InsertItem(hwndTab, MODE_CPUPOWER, &tie) == -1)
 		return FALSE;
 
-	hwndCpupower = CreateDialog( pTP->g_hInst, MAKEINTRESOURCE(IDD_CPU), hwndTab, DlgProcCpu );
+	HWND const hwndCpupower = CreateDialogParam( pTP->g_hInst, MAKEINTRESOURCE(IDD_CPU), pTP->hDlg, DlgProcCpu, (LPARAM)pTP );
 
 	if( hwndCpupower == NULL )
 		return FALSE;
 	
-	SendMessage(hwndCpupower, WM_THREADPACK_POINTER, (WPARAM)pTP, 0);
-	ShowWindow(pTP->hwndCpupower, SW_SHOWNORMAL);
-
 	// ---------------------------------------------------- PROCESSLIST
 	tie.pszText = _T("Process");
 
 	if(TabCtrl_InsertItem(hwndTab, MODE_PROCESS, &tie) == -1)
 		return FALSE;
 
-	hwndProcessList = CreateDialog( pTP->g_hInst, MAKEINTRESOURCE(IDD_PROCESS_LIST), hwndTab, DlgProcProcess );
+	HWND const hwndProcessList = CreateDialogParam( pTP->g_hInst, MAKEINTRESOURCE(IDD_PROCESS_LIST), pTP->hDlg, DlgProcProcess, (LPARAM)pTP );
 
 	if( hwndProcessList == NULL )
 		return FALSE;
 	
-	SendMessage(hwndProcessList, WM_THREADPACK_POINTER, (WPARAM)pTP, 0);
-	ShowWindow(pTP->hwndProcessList, SW_SHOWNORMAL);
-
-
 	// ---------------------------------------------------- TASKLIST
 	tie.pszText = _T("Task");
 	if(TabCtrl_InsertItem(hwndTab, MODE_TASKLIST, &tie) == -1)
 		return FALSE;
 
-	hwndTaskList = CreateDialog( pTP->g_hInst, MAKEINTRESOURCE(IDD_TASK_LIST), hwndTab, DlgProcTask );
+	HWND const hwndTaskList = CreateDialogParam( pTP->g_hInst, MAKEINTRESOURCE(IDD_TASK_LIST), pTP->hDlg, DlgProcTask, (LPARAM)pTP );
 
 	if( hwndTaskList == NULL )
 		return FALSE;
-	
-	SendMessage(hwndTaskList, WM_THREADPACK_POINTER, (WPARAM)pTP, 0);
-	ShowWindow(pTP->hwndTaskList, SW_SHOWNORMAL);
 	
 	// ---------------------------------------------------- ADD
 
@@ -418,7 +415,8 @@ static void Measure(ThreadPack* pTP)
 	if( nIconIndex > 11 || nIconIndex < 0 )
 		nIconIndex = 0;
 	pTP->nidTrayIcon.hIcon = pTP->hIcon[nIconIndex];
-	Shell_NotifyIcon(NIM_MODIFY, &pTP->nidTrayIcon);
+	if (*shellapi.Shell_NotifyIcon)
+		(*shellapi.Shell_NotifyIcon)(NIM_MODIFY, &pTP->nidTrayIcon);
 
 	// memory history
 	GlobalMemoryStatus(&ms);
@@ -516,25 +514,19 @@ LPARAM GetSelectedItemLParam(HWND hwndLView)
 //-----------------------------------------------------------------------------
 void SelectItemLParam(HWND hwndLView, LPARAM lParam)
 {
-	int nIndex = -1;
-	LVITEM lvItem;
-	memset(&lvItem, 0, sizeof(LVITEM));
-	lvItem.mask = LVIF_PARAM;
-	
-	nIndex = ListView_GetNextItem(hwndLView, nIndex, 0);
+	// serch item
+	LVFINDINFO finditem;
+	memset(&finditem, 0, sizeof finditem);
 
-	while( nIndex != -1 )
+	finditem.flags = LVFI_PARAM;
+	finditem.lParam = lParam;
+
+	int nIndex = ListView_FindItem(hwndLView, -1, &finditem);
+
+	if (nIndex != -1)
 	{
-		lvItem.iItem = nIndex;
-
-		ListView_GetItem(hwndLView, &lvItem);
-
-		if( lvItem.lParam == lParam )
-		{
-			ListView_SetItemState(hwndLView, nIndex, LVIS_SELECTED, LVIS_SELECTED);
-		}
-
-		nIndex = ListView_GetNextItem(hwndLView, nIndex, 0);
+		ListView_SetItemState(hwndLView, nIndex, LVIS_SELECTED, LVIS_SELECTED);
+		ListView_EnsureVisible(hwndLView, nIndex, FALSE);
 	}
 }
 

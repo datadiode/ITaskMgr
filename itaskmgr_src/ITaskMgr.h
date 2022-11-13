@@ -10,7 +10,6 @@
 #define MODE_TASKLIST	2
 
 #define MY_NOTIFYICON			(WM_APP + 1000)
-#define WM_THREADPACK_POINTER	(WM_USER + 1001)
 
 typedef struct _ThreadPack
 {

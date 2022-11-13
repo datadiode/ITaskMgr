@@ -2,7 +2,7 @@
 #include "ITaskMgr.h"
 #include "process.h"
 
-static DWORD CalcHeapOfProcess(DWORD dwProcessID);
+static SIZE_T CalcHeapOfProcess(DWORD dwProcessID);
 static BOOL DeleteProcessItem(HWND hwndLView, DWORD* pdwProcessIDs);
 static BOOL InitProcessListViewColumns(HWND hwndLView);
 static BOOL InsertProcessItem(HWND hwndLView, PROCESSENTRY32* ppe32);
@@ -13,17 +13,12 @@ static void ResizeWindow(HWND hDlg, LPARAM lParam);
 //-----------------------------------------------------------------------------
 // process listview dialog
 //-----------------------------------------------------------------------------
-BOOL CALLBACK DlgProcProcess(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
+INT_PTR CALLBACK DlgProcProcess(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
 	static ThreadPack* pTP = NULL;
 
 	switch(Msg)
 	{
-	case WM_THREADPACK_POINTER:
-	{
-		pTP = (ThreadPack*)wParam;
-		return TRUE;
-	}
 
 	// ----------------------------------------------------------
 	case WM_INITDIALOG:
@@ -34,6 +29,7 @@ BOOL CALLBACK DlgProcProcess(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 
 		ListView_SetExtendedListViewStyle(hwndLView, LVS_EX_FULLROWSELECT);
 
+		pTP = (ThreadPack*)lParam;
 		return TRUE;
 	}
 
@@ -86,11 +82,11 @@ BOOL CALLBACK DlgProcProcess(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 		
 		DrawProcessView(hwndLView);
 
-		DWORD dwProcessID = GetSelectedItemLParam(hwndLView);
+		DWORD dwProcessID = (DWORD)GetSelectedItemLParam(hwndLView);
 		
-		DWORD dwUsedHeap = CalcHeapOfProcess(dwProcessID);
+		SIZE_T dwUsedHeap = CalcHeapOfProcess(dwProcessID);
 
-		wsprintf(szFmt, _T("Memory used %dKB"), (dwUsedHeap>>10));
+		wsprintf(szFmt, _T("Memory used %uKB"), (DWORD)(dwUsedHeap>>10));
 		SetWindowText(hwndHeap, szFmt);
 
 		return 0;
@@ -203,7 +199,6 @@ static BOOL InitProcessListViewColumns(HWND hwndLView)
 	GetTextExtentPoint(hDC, _T("0000000000"), 10, &sz);
 	ReleaseDC(hwndLView, hDC);
 
-	ListView_SetColumnWidth(hwndLView, 0, LVSCW_AUTOSIZE_USEHEADER);
 	ListView_SetColumnWidth(hwndLView, 1, sz.cx);
 	ListView_SetColumnWidth(hwndLView, 2, sz.cx/2);
 
@@ -218,45 +213,43 @@ static BOOL InsertProcessItem(HWND hwndLView, PROCESSENTRY32* ppe32)
 	if(hwndLView == NULL)
 		return FALSE;
 
-	DWORD dwIndex;
-
 	// serch item
 	LVFINDINFO finditem;
-	memset(&finditem, 0, sizeof(LVFINDINFO));
+	memset(&finditem, 0, sizeof finditem);
 	
 	finditem.flags = LVFI_PARAM;
 	finditem.lParam = ppe32->th32ProcessID;
 
-	dwIndex = ListView_FindItem(hwndLView, -1, &finditem);
+	DWORD dwIndex = ListView_FindItem(hwndLView, -1, &finditem);
 
-	if( dwIndex != -1 )
-	{
-		return FALSE;
-	}
-
-	LVITEM lvItem;
-	memset(&lvItem, 0, sizeof(LVITEM));
-
-	lvItem.mask = LVIF_TEXT|LVIF_PARAM;
-	lvItem.iItem = 0;
-	lvItem.iSubItem = 0;
-	lvItem.pszText = ppe32->szExeFile;
-	lvItem.lParam = ppe32->th32ProcessID;
-
-	dwIndex = ListView_InsertItem(hwndLView, &lvItem);
-
-	if( dwIndex == 1 )
-	{
-		dwIndex = 0;
-		return FALSE;
-	}
-
-	// Add subitems
 	TCHAR szFmt[256];
 
-	// id
-	wsprintf( szFmt, _T("%08X"), ppe32->th32ProcessID );
-	ListView_SetItemText( hwndLView, dwIndex, 1, szFmt );
+	if (dwIndex == -1)
+	{
+		LVITEM lvItem;
+		memset(&lvItem, 0, sizeof(LVITEM));
+
+		lvItem.mask = LVIF_TEXT | LVIF_PARAM;
+		lvItem.iItem = 0;
+		lvItem.iSubItem = 0;
+		lvItem.pszText = ppe32->szExeFile;
+		lvItem.lParam = ppe32->th32ProcessID;
+
+		dwIndex = ListView_InsertItem(hwndLView, &lvItem);
+
+		if( dwIndex == -1 )
+		{
+			return FALSE;
+		}
+
+		// Add nonvolatile subitems
+
+		// id
+		wsprintf(szFmt, _T("%08X"), ppe32->th32ProcessID);
+		ListView_SetItemText( hwndLView, dwIndex, 1, szFmt );
+	}
+
+	// Add volatile subitems
 
 	// threads
 	wsprintf( szFmt, _T("%d"), ppe32->cntThreads );
@@ -311,9 +304,7 @@ static BOOL DeleteProcessItem(HWND hwndLView, DWORD* pdwProcessIDs)
 //-----------------------------------------------------------------------------
 static void KillSelectedProcess(HWND hwndLView)
 {
-	DWORD dwProcessID;
-
-	dwProcessID = GetSelectedItemLParam(hwndLView);
+	DWORD dwProcessID = (DWORD)GetSelectedItemLParam(hwndLView);
 
 	if( dwProcessID == 0 )
 		return;
@@ -323,26 +314,29 @@ static void KillSelectedProcess(HWND hwndLView)
 		, APPNAME 
 		, MB_OKCANCEL|MB_DEFBUTTON2|MB_APPLMODAL|MB_ICONEXCLAMATION ) )
 	{
-		HANDLE hProcess;
-		hProcess = OpenProcess(0, FALSE, dwProcessID);
-		TerminateProcess(hProcess, 0);
+		if (HANDLE hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, dwProcessID))
+		{
+			TerminateProcess(hProcess, 0);
+			CloseHandle(hProcess);
+		}
 	}
 }
 
 //-----------------------------------------------------------------------------
 // calc process loaded memory
 //-----------------------------------------------------------------------------
-static DWORD CalcHeapOfProcess(DWORD dwProcessID)
+static SIZE_T CalcHeapOfProcess(DWORD dwProcessID)
 {
+	SIZE_T dwUsedHeap = 0;
+#ifdef _WIN32_WCE
 	if( dwProcessID == 0 )
 		return 0;
 
-	DWORD dwUsedHeap = 0;
 	// -- heap
 	HANDLE hSS;
 	hSS = CreateToolhelp32Snapshot(TH32CS_SNAPHEAPLIST, dwProcessID);
 
-	if( hSS == (void*)-1 )
+	if( hSS == INVALID_HANDLE_VALUE )
 	{
 		return FALSE;
 	}	
@@ -395,7 +389,17 @@ static DWORD CalcHeapOfProcess(DWORD dwProcessID)
 		dwUsedHeap = 0;
 	}
 	CloseToolhelp32Snapshot(hSS);
-
+#else
+	if (HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, dwProcessID))
+	{
+		PROCESS_MEMORY_COUNTERS pmc;
+		if (GetProcessMemoryInfo(hProcess, &pmc, sizeof pmc))
+		{
+			dwUsedHeap = pmc.WorkingSetSize;
+		}
+		CloseHandle(hProcess);
+	}
+#endif
 	return dwUsedHeap;
 }
 
@@ -408,42 +412,43 @@ static void ResizeWindow(HWND hDlg, LPARAM lParam)
 	HWND hwndTermBtn = GetDlgItem(hDlg, IDC_TERMINATE);
 	HWND hwndHeap = GetDlgItem(hDlg, IDC_HEAP);
 
-	HDWP hdwp;
 	RECT rcTab;
-	RECT rcLView;
 	RECT rcTermBtn;
-	RECT rcHeap;
 
 	SetRect(&rcTab, 0, 0, LOWORD(lParam), HIWORD(lParam));
-	TabCtrl_AdjustRect(hDlg, FALSE, &rcLView);
+	TabCtrl_AdjustRect(hDlg, FALSE, &rcTab);
 
-	GetClientRect(hwndLView, &rcLView);
 	GetClientRect(hwndTermBtn, &rcTermBtn);
-	GetClientRect(hwndHeap, &rcHeap);
 
-	hdwp = BeginDeferWindowPos(3);
+	HDWP hdwp = BeginDeferWindowPos(3);
 	
-	DeferWindowPos(hdwp, hwndLView, HWND_TOP
-		, 5
-		, 5
-		, rcTab.right - rcTab.left -5 -5
-		, rcTab.bottom - rcTermBtn.bottom -5 -5
-		, 0);
+	hdwp = DeferWindowPos(hdwp, hwndLView, NULL
+		, rcTab.left
+		, rcTab.top
+		, rcTab.right - rcTab.left
+		, rcTab.bottom - rcTermBtn.bottom
+		, SWP_NOZORDER);
 
-	DeferWindowPos(hdwp, hwndTermBtn, HWND_TOP
-		, rcTab.right -5 - rcTermBtn.right
+	hdwp = DeferWindowPos(hdwp, hwndTermBtn, NULL
+		, rcTab.right - rcTermBtn.right
 		, rcTab.bottom - rcTermBtn.bottom
 		, rcTermBtn.right
 		, rcTermBtn.bottom
-		, 0);
+		, SWP_NOZORDER);
 
-	DeferWindowPos(hdwp, hwndHeap, HWND_TOP
+	hdwp = DeferWindowPos(hdwp, hwndHeap, NULL
 		, 5
 		, rcTab.bottom - rcTermBtn.bottom
-		, (rcTab.right - rcTab.left -5 -5) - rcTermBtn.right -5
+		, (rcTab.right - rcTab.left) - rcTermBtn.right
 		, rcTermBtn.bottom
-		, 0);
+		, SWP_NOZORDER);
 
 	EndDeferWindowPos(hdwp);
 
+	int cx = rcTab.right - rcTab.left;
+	cx -= 2 * GetSystemMetrics(SM_CXBORDER);
+	cx -= GetSystemMetrics(SM_CXVSCROLL);
+	cx -= ListView_GetColumnWidth(hwndLView, 1) + 1;
+	cx -= ListView_GetColumnWidth(hwndLView, 2) + 1;
+	ListView_SetColumnWidth(hwndLView, 0, cx);
 }

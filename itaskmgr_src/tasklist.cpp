@@ -1,6 +1,5 @@
 #include "stdafx.h"
 #include "ITaskMgr.h"
-#include "tasklist.h"
 #include "resource.h"
 
 static BOOL InitTaskListViewColumns(HWND hwndLView);
@@ -18,17 +17,12 @@ DWORD g_nDefaultIconIndex;
 //-----------------------------------------------------------------------------
 // process listview dialog
 //-----------------------------------------------------------------------------
-BOOL CALLBACK DlgProcTask(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
+INT_PTR CALLBACK DlgProcTask(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
 	static ThreadPack* pTP = NULL;
 
 	switch(Msg)
 	{
-	case WM_THREADPACK_POINTER:
-	{
-		pTP = (ThreadPack*)wParam;
-		return TRUE;
-	}
 
 	// ----------------------------------------------------------
 	case WM_INITDIALOG:
@@ -51,6 +45,7 @@ BOOL CALLBACK DlgProcTask(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 		HWND hwndLView = GetDlgItem(hDlg, IDC_LV_TASKLIST);
 		InitTaskListViewColumns(hwndLView);
 		DrawTaskView(hwndLView);
+		pTP = (ThreadPack*)lParam;
 		return TRUE;
 	}
 
@@ -391,41 +386,39 @@ static void ResizeWindow(HWND hDlg, LPARAM lParam)
 	HWND hwndTaskSwitch = GetDlgItem(hDlg, IDC_TASK_SWITCH);
 	HWND hwndTaskClose = GetDlgItem(hDlg, IDC_TASK_CLOSE);
 
-	HDWP hdwp;
 	RECT rcTab;
 	RECT rcLView;
 	RECT rcTaskSwitch;
 	RECT rcTaskClose;
 
 	SetRect(&rcTab, 0, 0, LOWORD(lParam), HIWORD(lParam));
-	TabCtrl_AdjustRect(hDlg, FALSE, &rcLView);
+	TabCtrl_AdjustRect(hDlg, FALSE, &rcTab);
 
-	GetClientRect(hwndLView, &rcLView);
 	GetClientRect(hwndTaskSwitch, &rcTaskSwitch);
 	GetClientRect(hwndTaskClose, &rcTaskClose);
 
-	hdwp = BeginDeferWindowPos(3);
+	HDWP hdwp = BeginDeferWindowPos(3);
 	
-	DeferWindowPos(hdwp, hwndLView, HWND_TOP
-		, 5
-		, 5
-		, rcTab.right - rcTab.left -5 -5
-		, rcTab.bottom - rcTaskSwitch.bottom -5 -5
-		, 0);
+	hdwp = DeferWindowPos(hdwp, hwndLView, NULL
+		, rcTab.left
+		, rcTab.top
+		, rcTab.right - rcTab.left
+		, rcTab.bottom - rcTaskSwitch.bottom
+		, SWP_NOZORDER);
 
-	DeferWindowPos(hdwp, hwndTaskSwitch, HWND_TOP
-		, rcTab.right -5 - rcTaskSwitch.right
+	hdwp = DeferWindowPos(hdwp, hwndTaskSwitch, NULL
+		, rcTab.right - rcTaskSwitch.right
 		, rcTab.bottom - rcTaskSwitch.bottom
 		, rcTaskSwitch.right
 		, rcTaskSwitch.bottom
-		, 0);
+		, SWP_NOZORDER);
 
-	DeferWindowPos(hdwp, hwndTaskClose, HWND_TOP
-		, rcTab.right -5 - rcTaskSwitch.right - rcTaskClose.right - 5
+	hdwp = DeferWindowPos(hdwp, hwndTaskClose, NULL
+		, rcTab.right - rcTaskSwitch.right - rcTaskClose.right
 		, rcTab.bottom - rcTaskSwitch.bottom
 		, rcTaskClose.right
 		, rcTaskSwitch.bottom
-		, 0);
+		, SWP_NOZORDER);
 
 	EndDeferWindowPos(hdwp);
 

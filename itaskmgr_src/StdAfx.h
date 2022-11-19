@@ -25,10 +25,8 @@
 #define Heap32First(hSnapshot, lphe, th32ProcessID, th32HeapID) Heap32First(lphe, th32ProcessID, th32HeapID)
 #define Heap32Next(hSnapshot, lphe) Heap32Next(lphe)
 #define CeSetThreadAffinity(hThread, dwProcessor) SetThreadAffinityMask(hThread, dwProcessor)
-#define CeGetProcessAffinity(hProcess, lpProcessAffinity) GetProcessAffinityMask(hProcess, lpProcessAffinity, lpProcessAffinity)
 #elif _WIN32_WCE <= 0x600
 #define CeSetThreadAffinity(hThread, dwProcessor) (FALSE)
-#define CeGetProcessAffinity(hProcess, lpProcessAffinity) (FALSE)
 #endif
 
 template<typename f>

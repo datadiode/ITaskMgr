@@ -536,18 +536,12 @@ void SelectItemLParam(HWND hwndLView, LPARAM lParam)
 //-----------------------------------------------------------------------------
 static BOOL CreateThreads(ThreadPack* pTP)
 {
-	pTP->nCpuCores = 1;
-	if (HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, GetCurrentProcessId()))
-	{
-		DWORD_PTR dwProcessAffinity = 0;
-		if (CeGetProcessAffinity(GetCurrentProcess(), &dwProcessAffinity))
-			while ((pTP->nCpuCores < CPUCORE_MAX) && (dwProcessAffinity >>= 1) != 0)
-				++pTP->nCpuCores;
-	}
-	DWORD ThreadID;
+	SYSTEM_INFO si;
+	GetSystemInfo(&si);
+	pTP->nCpuCores = si.dwNumberOfProcessors;
 	for (int i = 0; i < pTP->nCpuCores; ++i)
 	{
-		pTP->hIdleThread[i] = CreateThread(NULL, 0, thIdle, pTP, CREATE_SUSPENDED, &ThreadID);
+		pTP->hIdleThread[i] = CreateThread(NULL, 0, thIdle, pTP, CREATE_SUSPENDED, NULL);
 		SetThreadPriority(pTP->hIdleThread[i], THREAD_PRIORITY_IDLE);
 		CeSetThreadAffinity(pTP->hIdleThread[i], 1 << i);
 		ResumeThread(pTP->hIdleThread[i]);

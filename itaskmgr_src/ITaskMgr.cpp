@@ -11,7 +11,7 @@ INT_PTR CALLBACK DlgProcTask(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
 #ifdef _WIN32_WCE
 #define MAIN_DLG_CX 240
 #else
-#define MAIN_DLG_CX 280
+#define MAIN_DLG_CX 400
 #endif
 
 static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
@@ -22,7 +22,7 @@ static BOOL CreateIcon(ThreadPack* pTP);
 static BOOL CreateThreads(ThreadPack* pTP);
 
 static void Measure(ThreadPack* pTP);
-static void thIdle(LPVOID pvParams);
+static DWORD CALLBACK thIdle(LPVOID pvParams);
 static DWORD GetThreadTick(FILETIME* a, FILETIME* b);
 
 HINSTANCE	g_hInst;
@@ -103,10 +103,10 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPara
 		pTP->dwInterval = 2000; //sec
 		pTP->g_hInst = g_hInst;
 
-		memset(pTP->chPowHistory, -1, HISTORY_MAX);
-		pTP->chPowHistory[0] = 0;
-		memset(pTP->chMemHistory, -1, HISTORY_MAX);
-		pTP->chMemHistory[0] = 0;
+		memset(pTP->chPowHistory, -1, sizeof pTP->chPowHistory);
+		memset(pTP->chPowHistory, 0, sizeof *pTP->chPowHistory);
+		memset(pTP->chMemHistory, -1, sizeof pTP->chMemHistory);
+		memset(pTP->chMemHistory, 0, sizeof *pTP->chMemHistory);
 
 		if( CreateTab(pTP) == FALSE
 			|| CreateIcon(pTP) == FALSE
@@ -375,35 +375,48 @@ static BOOL CreateIcon(ThreadPack* pTP)
 //-----------------------------------------------------------------------------
 static void Measure(ThreadPack* pTP)
 {
-	static DWORD	dwLastThreadTime = 0;
-	static DWORD	dwLastTickTime = 0;
-	DWORD dwCurrentThreadTime =0;
-	DWORD dwCurrentTickTime = 0;
+	static DWORD dwLastThreadTime[CPUCORE_MAX] = { 0 };
+	static DWORD dwLastTickTime = 0;
+	DWORD dwCurrentThreadTime[CPUCORE_MAX] = { 0 };
+	DWORD dwCurrentTickTime = GetTickCount();
 
 	FILETIME ftCreationTime;
 	FILETIME ftExitTime;
 	FILETIME ftKernelTime;
 	FILETIME ftUserTime;
 
-	DWORD dwCpuPower;
+	// Shift history
+	size_t z = sizeof *pTP->chPowHistory;
+	memmove(pTP->chPowHistory + 1, pTP->chPowHistory, sizeof pTP->chPowHistory - sizeof *pTP->chPowHistory);
+	memmove(pTP->chMemHistory + 1, pTP->chMemHistory, sizeof pTP->chMemHistory - sizeof *pTP->chMemHistory);
 
 	MEMORYSTATUS ms;
 	ms.dwLength = sizeof(MEMORYSTATUS);
 
-	// search status
-	SuspendThread(pTP->hIdleThread);
+	// memory history
+	GlobalMemoryStatus(&ms);
+	*pTP->chMemHistory = (char)ms.dwMemoryLoad;
 
-	dwCurrentTickTime = GetTickCount();
-	GetThreadTimes(pTP->hIdleThread, &ftCreationTime, &ftExitTime, &ftKernelTime, &ftUserTime);
-	dwCurrentThreadTime = GetThreadTick(&ftKernelTime, &ftUserTime);
+	// cpu histroy
+	DWORD dwCpuPower = 0;
+	for (int i = 0; i < pTP->nCpuCores; ++i)
+	{
+		SuspendThread(pTP->hIdleThread[i]);
+		GetThreadTimes(pTP->hIdleThread[i], &ftCreationTime, &ftExitTime, &ftKernelTime, &ftUserTime);
+		dwCurrentThreadTime[i] = GetThreadTick(&ftKernelTime, &ftUserTime);
 
-	// calculate cpu power
-	if( dwCurrentTickTime != dwLastTickTime || dwLastThreadTime != 0 || dwLastTickTime != 0)
-		dwCpuPower = 100 - (((dwCurrentThreadTime - dwLastThreadTime) * 100) / (dwCurrentTickTime - dwLastTickTime));
-	else
-		dwCpuPower = 0;	// avoid 0div
-
-	SetDlgItemInt(pTP->hDlg, IDC_CPUPOWER, dwCpuPower, 0);
+		DWORD dwCorePower;
+		// calculate cpu power
+		if (dwCurrentTickTime != dwLastTickTime && dwLastThreadTime[i] != 0 && dwLastTickTime != 0)
+			dwCorePower = 100 - (((dwCurrentThreadTime[i] - dwLastThreadTime[i]) * 100) / (dwCurrentTickTime - dwLastTickTime));
+		else
+			dwCorePower = 0;	// avoid 0div
+		pTP->chPowHistory[0][i] = (char)dwCorePower;
+		dwCpuPower += dwCorePower;
+		dwLastThreadTime[i] = dwCurrentThreadTime[i];
+		ResumeThread(pTP->hIdleThread[i]);
+	}
+	dwCpuPower /= pTP->nCpuCores;
 
 	// Draw tray icon
 	int nIconIndex = (dwCpuPower)*11/100;
@@ -413,33 +426,20 @@ static void Measure(ThreadPack* pTP)
 	if (*shellapi.Shell_NotifyIcon)
 		(*shellapi.Shell_NotifyIcon)(NIM_MODIFY, &pTP->nidTrayIcon);
 
-	// memory history
-	GlobalMemoryStatus(&ms);
-	
-
-	// Shift history
-	memmove(pTP->chPowHistory+1, pTP->chPowHistory, HISTORY_MAX-1);
-	memmove(pTP->chMemHistory+1, pTP->chMemHistory, HISTORY_MAX-1);
-	
-	// save history
-	*pTP->chPowHistory = (char)dwCpuPower;
-	*pTP->chMemHistory = (char)ms.dwMemoryLoad;
-
 	// save status
 	dwLastTickTime = GetTickCount();
-	dwLastThreadTime = dwCurrentThreadTime;
-
-	ResumeThread(pTP->hIdleThread);
 }
 
 //-----------------------------------------------------------------------------
 // dummy thread for mesure cpu power
 //-----------------------------------------------------------------------------
-static void thIdle(LPVOID pvParams)
+static DWORD CALLBACK thIdle(LPVOID pvParams)
 {
 	ThreadPack* pTP = (ThreadPack*)pvParams;
 
 	while(!g_bThreadEnd/*pTP->bEnd*/);
+
+	return 0;
 }
 
 //-----------------------------------------------------------------------------
@@ -536,16 +536,21 @@ void SelectItemLParam(HWND hwndLView, LPARAM lParam)
 //-----------------------------------------------------------------------------
 static BOOL CreateThreads(ThreadPack* pTP)
 {
-	DWORD ThreadID;
-	pTP->hIdleThread = CreateThread(NULL, 0, 
-		(LPTHREAD_START_ROUTINE)thIdle, (LPVOID)pTP, CREATE_SUSPENDED, &ThreadID);
-	
-	if( pTP->hIdleThread == NULL )
+	pTP->nCpuCores = 1;
+	if (HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, GetCurrentProcessId()))
 	{
-		return FALSE;
+		DWORD_PTR dwProcessAffinity = 0;
+		if (CeGetProcessAffinity(GetCurrentProcess(), &dwProcessAffinity))
+			while ((pTP->nCpuCores < CPUCORE_MAX) && (dwProcessAffinity >>= 1) != 0)
+				++pTP->nCpuCores;
 	}
-	SetThreadPriority(pTP->hIdleThread, THREAD_PRIORITY_IDLE);
-	ResumeThread(pTP->hIdleThread);
+	DWORD ThreadID;
+	for (int i = 0; i < pTP->nCpuCores; ++i)
+	{
+		pTP->hIdleThread[i] = CreateThread(NULL, 0, thIdle, pTP, CREATE_SUSPENDED, &ThreadID);
+		SetThreadPriority(pTP->hIdleThread[i], THREAD_PRIORITY_IDLE);
+		CeSetThreadAffinity(pTP->hIdleThread[i], 1 << i);
+		ResumeThread(pTP->hIdleThread[i]);
+	}
 	return TRUE;
 }
-

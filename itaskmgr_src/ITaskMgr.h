@@ -3,6 +3,7 @@
 
 #define APPNAME	_T("ITaskMgr")
 #define HISTORY_MAX	512
+#define CPUCORE_MAX	8
 
 #define MODE_ICON		-1
 #define MODE_CPUPOWER	0
@@ -16,9 +17,10 @@ typedef struct _ThreadPack
 	HINSTANCE g_hInst;
 	HWND hDlg;
 	UINT nMode;
+	int nCpuCores;
 	BOOL bEnd;
 
-	HANDLE hIdleThread;
+	HANDLE hIdleThread[CPUCORE_MAX];
 	
 	HWND hwndTab;
 	HWND hwndProcessList;
@@ -29,7 +31,7 @@ typedef struct _ThreadPack
 	HICON hIcon[12];
 	NOTIFYICONDATA	nidTrayIcon;
 
-	char chPowHistory[HISTORY_MAX];
+	char chPowHistory[HISTORY_MAX][CPUCORE_MAX];
 	char chMemHistory[HISTORY_MAX];
 } ThreadPack;
 

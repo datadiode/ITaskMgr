@@ -65,7 +65,7 @@ BEGIN
     CONTROL         "",IDC_CPU_DRAW,"Button",BS_OWNERDRAW | WS_DISABLED,5,5,
                     115,80,WS_EX_STATICEDGE
     CONTROL         "CPU time\t%d%%\r\nMemory\t%dKB/%dKB",IDC_CPU_TEXT,
-                    "Static",SS_LEFTNOWORDWRAP | WS_GROUP,10,95,105,20
+                    "Edit", ES_MULTILINE | ES_AUTOHSCROLL | ES_AUTOVSCROLL | ES_READONLY | WS_GROUP | NOT WS_TABSTOP, 10, 95, 105, 20
 END
 
 IDD_HELP DIALOG DISCARDABLE  0, 0, 135, 38
@@ -115,14 +115,14 @@ BEGIN
         BEGIN
             VALUE "Comments", "https://github.com/datadiode/UTIL-PROCESS-ITaskMgr\0"
             VALUE "CompanyName", "Yuichiro Ishitani et al.\0"
-            VALUE "FileDescription", "regedt33\0"
+            VALUE "FileDescription", "ITaskMgr\0"
             VALUE "FileVersion", GEN_VER_VERSION_STRING
-            VALUE "InternalName", "regedt33\0"
+            VALUE "InternalName", "ITaskMgr\0"
             VALUE "LegalCopyright", "BSD-3-Clause\0"
             VALUE "LegalTrademarks", "\0"
-            VALUE "OriginalFilename", "regedt33.exe\0"
+            VALUE "OriginalFilename", "ITaskMgr.exe\0"
             VALUE "PrivateBuild", "\0"
-            VALUE "ProductName", "regedt33\0"
+            VALUE "ProductName", "ITaskMgr\0"
             VALUE "ProductVersion", GEN_VER_VERSION_STRING
             VALUE "SpecialBuild", "\0"
         END

@@ -4,6 +4,11 @@
 static BOOL ShowCpuStatus(ThreadPack* pTP);
 static BOOL DrawGraph(ThreadPack* pTP, HWND hwndDraw);
 
+static HPEN hpenDarkGreen;
+static HPEN hpenLightGreen;
+static HPEN hpenMagenta;
+static HPEN hpenYellow;
+
 //-----------------------------------------------------------------------------
 // cpu graph dialog proc
 //-----------------------------------------------------------------------------
@@ -18,12 +23,39 @@ INT_PTR CALLBACK DlgProcCpu(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 	case WM_INITDIALOG:
 	{
 		pTP = (ThreadPack*)lParam;
+
+		hpenDarkGreen = CreatePen(PS_SOLID, 1, RGB(0, 127, 0));
+		hpenLightGreen = CreatePen(PS_SOLID, 1, RGB(0, 255, 0));
+		hpenMagenta = CreatePen(PS_SOLID, 1, RGB(255, 0, 255));
+		hpenYellow = CreatePen(PS_SOLID, 1, RGB(255, 255, 0));
+
+		HWND hwndText = GetDlgItem(hDlg, IDC_CPU_TEXT);
+		UINT tabstops[CPUCORE_MAX];
+		tabstops[0] = 46;
+		// Before C++17, there is no guarantee that RHS evaluates before LHS
+		for (int i = 0; i < CPUCORE_MAX - 1;)
+		{
+			UINT t = tabstops[i];
+			tabstops[++i] = t + 20;
+		}
+		SendMessage(hwndText, EM_SETTABSTOPS, CPUCORE_MAX, (LPARAM)tabstops);
+
 		HWND hwndDraw = GetDlgItem(hDlg, IDC_CPU_DRAW);
 		DrawGraph(pTP, hwndDraw);
 		ShowCpuStatus(pTP);
 		return TRUE;
 	}
-	
+
+	// ----------------------------------------------------------
+	case WM_DESTROY:
+	{
+		DeleteObject(hpenDarkGreen);
+		DeleteObject(hpenLightGreen);
+		DeleteObject(hpenMagenta);
+		DeleteObject(hpenYellow);
+		break;
+	}
+
 	// ----------------------------------------------------------
 	case WM_SIZE:
 	{ 
@@ -96,7 +128,7 @@ static BOOL ShowCpuStatus(ThreadPack* pTP)
 		return FALSE;
 
 	MEMORYSTATUS ms;
-	TCHAR szFmt[128];
+	TCHAR szFmt[128], *pszFmt = szFmt;
 
 	HWND hDlg;
 	HWND hwndStatus;
@@ -109,15 +141,16 @@ static BOOL ShowCpuStatus(ThreadPack* pTP)
 	ms.dwLength = sizeof(MEMORYSTATUS);
 	GlobalMemoryStatus(&ms);
 
-
 	SIZE_T dwTotalMem = ms.dwTotalPhys>>10;
 	SIZE_T dwUsedMem = dwTotalMem - (ms.dwAvailPhys >> 10);
 
-	wsprintf(szFmt
-		, _T("CPU time\t%d%%\r\n")
-		  _T("Memory used\t%uKB/%uKB")
-		, (int)(pTP->chPowHistory[0])
-		, (DWORD)dwUsedMem, (DWORD)dwTotalMem);
+	pszFmt += wsprintf(pszFmt, _T("CPU time"));
+	for (int i = 0; i < pTP->nCpuCores; ++i)
+		pszFmt += wsprintf(pszFmt, _T("\t%d%%"), pTP->chPowHistory[0][i]);
+
+	pszFmt += wsprintf(pszFmt
+		,  _T("\r\nMemory used\t%uKB/%uKB")
+		, dwUsedMem, dwTotalMem);
 
 	SetWindowText(hwndStatus, szFmt);
 	return TRUE;
@@ -128,14 +161,11 @@ static BOOL ShowCpuStatus(ThreadPack* pTP)
 //-----------------------------------------------------------------------------
 static BOOL DrawGraph(ThreadPack* pTP, HWND hwndDraw)
 {
-	int ii;
+	int i, ii;
 
 	HDC hDC;
 	RECT rc;
 
-	HPEN hpenDarkGreen;
-	HPEN hpenLightGreen;
-	HPEN hpenYellow;
 	HPEN hOldPen;
 
 	POINT pntBuf[HISTORY_MAX];
@@ -146,35 +176,13 @@ static BOOL DrawGraph(ThreadPack* pTP, HWND hwndDraw)
 	if( pTP->nMode != MODE_CPUPOWER )
 		return TRUE;
 
-
 	static int nXLine = 0;
 	nXLine = (nXLine+=2) %12;
 
 	// drawing
 
-	if( !(hpenDarkGreen = CreatePen(PS_SOLID, 1, RGB(0, 127, 0))))
-	{
-		return FALSE;
-	}
-
-	if( !(hpenLightGreen = CreatePen(PS_SOLID, 1, RGB(0, 255, 0))))
-	{
-		DeleteObject(hpenDarkGreen);
-		return FALSE;
-	}
-
-	if( !(hpenYellow = CreatePen(PS_SOLID, 1, RGB(255, 255, 0))))
-	{
-		DeleteObject(hpenDarkGreen);
-		DeleteObject(hpenLightGreen);
-		return FALSE;
-	}
-
 	if(!(hDC = GetDC(hwndDraw)))
 	{
-		DeleteObject(hpenDarkGreen);
-		DeleteObject(hpenLightGreen);
-		DeleteObject(hpenYellow);
 		return FALSE;
 	}
 
@@ -204,22 +212,25 @@ static BOOL DrawGraph(ThreadPack* pTP, HWND hwndDraw)
 
 	SelectObject(hDC, hOldPen);
 	POINT* pPoint;
-
-	// Draw CPU POWER
-	pPoint = &pntBuf[0];
 	int xx;
 
-	xx = rc.right;
-	for( ii = 0; (ii < HISTORY_MAX) && (xx > rc.left); ii++, xx-=2, pPoint++ )
+	// Draw CPU POWER
+	for (i = pTP->nCpuCores; i--;)
 	{
-		LONG lHeight = (100 - pTP->chPowHistory[ii]);
-		pPoint->x = xx;
-		pPoint->y = rc.top + lHeight * (rc.bottom - rc.top)/100 ;
-	}
+		pPoint = &pntBuf[0];
 
-	hOldPen = (HPEN)SelectObject(hDC, hpenLightGreen);
-	Polyline(hDC, &pntBuf[0], ii);
-	SelectObject(hDC, hOldPen);
+		xx = rc.right;
+		for (ii = 0; (ii < HISTORY_MAX) && (xx > rc.left); ii++, xx -= 2, pPoint++)
+		{
+			LONG lHeight = (100 - pTP->chPowHistory[ii][i]);
+			pPoint->x = xx;
+			pPoint->y = rc.top + lHeight * (rc.bottom - rc.top) / 100;
+		}
+
+		hOldPen = (HPEN)SelectObject(hDC, i == 0 ? hpenLightGreen : hpenMagenta);
+		Polyline(hDC, &pntBuf[0], ii);
+		SelectObject(hDC, hOldPen);
+	}
 
 	// Draw Memory load
 	pPoint = &pntBuf[0];
@@ -236,15 +247,9 @@ static BOOL DrawGraph(ThreadPack* pTP, HWND hwndDraw)
 	Polyline(hDC, &pntBuf[0], ii);
 	SelectObject(hDC, hOldPen);
 
-
-
 	// finish
 	SelectObject(hDC, hOldPen);
-	DeleteObject(hpenDarkGreen);
-	DeleteObject(hpenLightGreen);
-	DeleteObject(hpenYellow);
 	ReleaseDC(hwndDraw, hDC);
 
 	return TRUE;
 }
-

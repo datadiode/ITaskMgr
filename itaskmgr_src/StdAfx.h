@@ -24,6 +24,8 @@
 #define CloseToolhelp32Snapshot CloseHandle
 #define Heap32First(hSnapshot, lphe, th32ProcessID, th32HeapID) Heap32First(lphe, th32ProcessID, th32HeapID)
 #define Heap32Next(hSnapshot, lphe) Heap32Next(lphe)
+#define CeSetThreadAffinity(hThread, dwProcessor) SetThreadAffinityMask(hThread, dwProcessor)
+#define CeGetProcessAffinity(hProcess, lpProcessAffinity) GetProcessAffinityMask(hProcess, lpProcessAffinity, lpProcessAffinity)
 #endif
 
 template<typename f>

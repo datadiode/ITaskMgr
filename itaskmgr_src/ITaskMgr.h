@@ -9,6 +9,7 @@
 #define MODE_CPUPOWER	0
 #define MODE_PROCESS	1
 #define MODE_TASKLIST	2
+#define MODE_INFO		3
 
 #define MY_NOTIFYICON			(WM_APP + 1000)
 
@@ -17,7 +18,7 @@ typedef struct _ThreadPack
 	HINSTANCE g_hInst;
 	HWND hDlg;
 	UINT nMode;
-	int nCpuCores;
+	SYSTEM_INFO si;
 	BOOL bEnd;
 
 	HANDLE hIdleThread[CPUCORE_MAX];
@@ -26,6 +27,7 @@ typedef struct _ThreadPack
 	HWND hwndProcessList;
 	HWND hwndCpupower;
 	HWND hwndTaskList;
+	HWND hwndInfo;
 
 	DWORD dwInterval;
 	HICON hIcon[12];

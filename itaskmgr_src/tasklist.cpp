@@ -43,6 +43,7 @@ INT_PTR CALLBACK DlgProcTask(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 			return FALSE;
 
 		HWND hwndLView = GetDlgItem(hDlg, IDC_LV_TASKLIST);
+		ListView_SetExtendedListViewStyle(hwndLView, LVS_EX_FULLROWSELECT);
 		InitTaskListViewColumns(hwndLView);
 		DrawTaskView(hwndLView);
 		pTP = (ThreadPack*)lParam;

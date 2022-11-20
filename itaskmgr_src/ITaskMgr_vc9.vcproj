@@ -383,6 +383,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\info.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\ITaskMgr.cpp"
 				>
 			</File>

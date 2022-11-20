@@ -7,11 +7,12 @@
 INT_PTR CALLBACK DlgProcCpu(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
 INT_PTR CALLBACK DlgProcProcess(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
 INT_PTR CALLBACK DlgProcTask(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK DlgProcInfo(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
 
 #ifdef _WIN32_WCE
 #define MAIN_DLG_CX 240
 #else
-#define MAIN_DLG_CX 400
+#define MAIN_DLG_CX 420
 #endif
 
 static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
@@ -108,9 +109,9 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPara
 		memset(pTP->chMemHistory, -1, sizeof pTP->chMemHistory);
 		memset(pTP->chMemHistory, 0, sizeof *pTP->chMemHistory);
 
-		if( CreateTab(pTP) == FALSE
-			|| CreateIcon(pTP) == FALSE
-			|| CreateThreads(pTP) == FALSE )
+		if (CreateThreads(pTP) == FALSE
+			|| CreateTab(pTP) == FALSE
+			|| CreateIcon(pTP) == FALSE)
 		{
 			MessageBox(hDlg, _T("Application initialize failed."), APPNAME, MB_ICONERROR);
 			EndDialog(hDlg, 0);
@@ -158,53 +159,36 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPara
 			&& (lpnmhdr->code == TCN_SELCHANGE))
 		{
 			pTP->nMode = TabCtrl_GetCurSel(pTP->hwndTab);
-			switch( pTP->nMode )
-			{
-			case MODE_CPUPOWER:
-				ShowWindow(pTP->hwndCpupower,		SW_SHOWNORMAL);
-				ShowWindow(pTP->hwndProcessList,	SW_HIDE);
-				ShowWindow(pTP->hwndTaskList,		SW_HIDE);
-				break;
-			case MODE_PROCESS:
-				ShowWindow(pTP->hwndCpupower,		SW_HIDE);
-				ShowWindow(pTP->hwndProcessList,	SW_SHOWNORMAL);
-				ShowWindow(pTP->hwndTaskList,		SW_HIDE);
-				break;
-			case MODE_TASKLIST:
-				ShowWindow(pTP->hwndCpupower,		SW_HIDE);
-				ShowWindow(pTP->hwndProcessList,	SW_HIDE);
-				ShowWindow(pTP->hwndTaskList,		SW_SHOWNORMAL);
-				break;
-
-			default:
-				break;
-			}
+			ShowWindow(pTP->hwndCpupower, pTP->nMode == MODE_CPUPOWER ? SW_SHOWNA : SW_HIDE);
+			ShowWindow(pTP->hwndProcessList, pTP->nMode == MODE_PROCESS ? SW_SHOWNA : SW_HIDE);
+			ShowWindow(pTP->hwndTaskList, pTP->nMode == MODE_TASKLIST ? SW_SHOWNA : SW_HIDE);
+			ShowWindow(pTP->hwndInfo, pTP->nMode == MODE_INFO ? SW_SHOWNA : SW_HIDE);
 		}
 		break; 
 
 	// ----------------------------------------------------------
 	case WM_SIZE:
 	{ 
-		HDWP hdwp; 
-		RECT rc; 
+		RECT rc = { 0, 0, LOWORD(lParam), HIWORD(lParam) };
+		TabCtrl_AdjustRect(pTP->hwndTab, FALSE, &rc);
 
-		SetRect(&rc, 0, 0, LOWORD(lParam), HIWORD(lParam)); 
-		TabCtrl_AdjustRect(pTP->hwndTab, FALSE, &rc); 
-
-		// Size the tab control to fit the client area. 
-		hdwp = BeginDeferWindowPos(4); 
+		// Size the tab control to fit the client area.
+		HDWP hdwp = BeginDeferWindowPos(5);
 		
-		DeferWindowPos(hdwp, pTP->hwndTab, NULL, 0, 0, LOWORD(lParam), HIWORD(lParam), SWP_NOMOVE | SWP_NOZORDER ); 
+		DeferWindowPos(hdwp, pTP->hwndTab, NULL, 0, 0, LOWORD(lParam), HIWORD(lParam), SWP_NOMOVE | SWP_NOZORDER);
 
 		DeferWindowPos(hdwp, pTP->hwndProcessList, HWND_TOP,
-			rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, 0 ); 
+			rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, 0);
 
 		DeferWindowPos(hdwp, pTP->hwndCpupower, HWND_TOP,
-			rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, 0 ); 
+			rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, 0);
 
 		DeferWindowPos(hdwp, pTP->hwndTaskList, HWND_TOP,
-			rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, 0 ); 
+			rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, 0);
 		
+		DeferWindowPos(hdwp, pTP->hwndInfo, HWND_TOP,
+			rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, 0);
+
 		EndDeferWindowPos(hdwp);
 	}
 	break; 
@@ -344,11 +328,22 @@ static BOOL CreateTab(ThreadPack* pTP)
 	if( hwndTaskList == NULL )
 		return FALSE;
 	
+	// ---------------------------------------------------- INFO
+	tie.pszText = _T("Info");
+	if (TabCtrl_InsertItem(hwndTab, MODE_INFO, &tie) == -1)
+		return FALSE;
+
+	HWND const hwndInfo = CreateDialogParam(pTP->g_hInst, MAKEINTRESOURCE(IDD_SYSTEM_INFO), pTP->hDlg, DlgProcInfo, (LPARAM)pTP);
+
+	if (hwndTaskList == NULL)
+		return FALSE;
+
 	// ---------------------------------------------------- ADD
 
 	pTP->hwndProcessList = hwndProcessList;
 	pTP->hwndCpupower = hwndCpupower;
 	pTP->hwndTaskList = hwndTaskList;
+	pTP->hwndInfo = hwndInfo;
 
 	return TRUE;
 
@@ -399,7 +394,7 @@ static void Measure(ThreadPack* pTP)
 
 	// cpu histroy
 	DWORD dwCpuPower = 0;
-	for (int i = 0; i < pTP->nCpuCores; ++i)
+	for (DWORD i = 0; i < pTP->si.dwNumberOfProcessors; ++i)
 	{
 		SuspendThread(pTP->hIdleThread[i]);
 		GetThreadTimes(pTP->hIdleThread[i], &ftCreationTime, &ftExitTime, &ftKernelTime, &ftUserTime);
@@ -416,7 +411,7 @@ static void Measure(ThreadPack* pTP)
 		dwLastThreadTime[i] = dwCurrentThreadTime[i];
 		ResumeThread(pTP->hIdleThread[i]);
 	}
-	dwCpuPower /= pTP->nCpuCores;
+	dwCpuPower /= pTP->si.dwNumberOfProcessors;
 
 	// Draw tray icon
 	int nIconIndex = (dwCpuPower)*11/100;
@@ -536,10 +531,9 @@ void SelectItemLParam(HWND hwndLView, LPARAM lParam)
 //-----------------------------------------------------------------------------
 static BOOL CreateThreads(ThreadPack* pTP)
 {
-	SYSTEM_INFO si;
-	GetSystemInfo(&si);
-	pTP->nCpuCores = si.dwNumberOfProcessors;
-	for (int i = 0; i < pTP->nCpuCores; ++i)
+	GetSystemInfo(&pTP->si);
+	pTP->si.dwNumberOfProcessors;
+	for (DWORD i = 0; i < pTP->si.dwNumberOfProcessors; ++i)
 	{
 		pTP->hIdleThread[i] = CreateThread(NULL, 0, thIdle, pTP, CREATE_SUSPENDED, NULL);
 		SetThreadPriority(pTP->hIdleThread[i], THREAD_PRIORITY_IDLE);

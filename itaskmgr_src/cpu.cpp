@@ -30,15 +30,8 @@ INT_PTR CALLBACK DlgProcCpu(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 		hpenYellow = CreatePen(PS_SOLID, 1, RGB(255, 255, 0));
 
 		HWND hwndText = GetDlgItem(hDlg, IDC_CPU_TEXT);
-		UINT tabstops[CPUCORE_MAX];
-		tabstops[0] = 46;
-		// Before C++17, there is no guarantee that RHS evaluates before LHS
-		for (int i = 0; i < CPUCORE_MAX - 1;)
-		{
-			UINT t = tabstops[i];
-			tabstops[++i] = t + 20;
-		}
-		SendMessage(hwndText, EM_SETTABSTOPS, CPUCORE_MAX, (LPARAM)tabstops);
+		static UINT const tabstop = 20;
+		SendMessage(hwndText, EM_SETTABSTOPS, 1, (LPARAM)&tabstop);
 
 		HWND hwndDraw = GetDlgItem(hDlg, IDC_CPU_DRAW);
 		DrawGraph(pTP, hwndDraw);
@@ -144,8 +137,8 @@ static BOOL ShowCpuStatus(ThreadPack* pTP)
 	SIZE_T dwTotalMem = ms.dwTotalPhys>>10;
 	SIZE_T dwUsedMem = dwTotalMem - (ms.dwAvailPhys >> 10);
 
-	pszFmt += wsprintf(pszFmt, _T("CPU time"));
-	for (int i = 0; i < pTP->nCpuCores; ++i)
+	pszFmt += wsprintf(pszFmt, _T("CPU time\t"));
+	for (DWORD i = 0; i < pTP->si.dwNumberOfProcessors; ++i)
 		pszFmt += wsprintf(pszFmt, _T("\t%d%%"), pTP->chPowHistory[0][i]);
 
 	pszFmt += wsprintf(pszFmt
@@ -215,7 +208,7 @@ static BOOL DrawGraph(ThreadPack* pTP, HWND hwndDraw)
 	int xx;
 
 	// Draw CPU POWER
-	for (i = pTP->nCpuCores; i--;)
+	for (i = pTP->si.dwNumberOfProcessors; i--;)
 	{
 		pPoint = &pntBuf[0];
 

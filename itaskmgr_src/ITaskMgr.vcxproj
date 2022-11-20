@@ -337,6 +337,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="cpu.cpp" />
+    <ClCompile Include="info.cpp" />
     <ClCompile Include="ITaskMgr.cpp" />
     <ClCompile Include="process.cpp" />
     <ClCompile Include="StdAfx.cpp" />

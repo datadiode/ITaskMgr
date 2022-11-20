@@ -29,9 +29,9 @@ div
 {
 	white-space: nowrap;
 }
-div label
+#ShowLicense
 {
-	padding-right: 10px;
+	margin-left: 1em;
 }
 a
 {
@@ -85,10 +85,20 @@ Function DeleteFolder(path)
 	DeleteFolder = Err.Number = 0
 End Function
 
+Function MakeShellLink(path)
+	MakeShellLink = Len(path) & "#" & path
+End Function
+
 Sub CreateAddon_OnClick
 	Dim i, frame, line, path, file
 	CreateFolder(AddOnFolder)
-	If CreateFolder(AddOnFolder & "\" & AddOnName) Then DeleteAddon.disabled = False
+	If CreateFolder(AddOnFolder & "\" & AddOnName) Then
+		DeleteAddon.disabled = False
+		path = AddOnFolder & "\" & AddOnName & "\Common"
+		If CreateFolder(path) Then
+			fso.CreateTextFile(path & "\ITaskMgr.lnk").Write MakeShellLink("\flash\AddOn\ITaskMgr.exe")
+		End If
+	End If
 	For i = 0 To document.frames.length - 1
 		Set frame = document.frames(i)
 		path = AddOnFolder & "\" & AddOnName & "\" & frame.frameElement.name
@@ -105,6 +115,8 @@ Sub CreateAddon_OnClick
 				file.WriteLine FormatNumber(Right(frame.frameElement.name, 3) / 100, 2) & " " & Right(line, 22)
 			ElseIf InStr(1, line, "; file ", vbTextCompare) = 1 Then
 				file.WriteLine "\" & frame.frameElement.name & "\ITaskMgr.exe > \flash\AddOn\ #NO"
+				If AddDesktopLink.checked Then file.WriteLine "\Common\ITaskMgr.lnk > \Windows\Desktop\ #NO"
+				If AddToStartMenu.checked Then file.WriteLine "\Common\ITaskMgr.lnk > \Windows\Programs\ #NO"
 			' ElseIf InStr(1, line, "; registry ", vbTextCompare) = 1 Then
 			' ElseIf InStr(1, line, "; uninstall ", vbTextCompare) = 1 Then
 			ElseIf Len(line) <> 0 And InStr(line, "\") = 0 And InStr(line, ";") = 0 Then
@@ -158,6 +170,10 @@ End Sub
 <button id="DeleteAddon">Delete ProSave Addon</button>
 <label for="Intrusive" title="This option allows an install right beside ProSave's stock addons (requires admin rights)">
 <input id="Intrusive" type="checkbox">Intrusive</label>
-<button id="ShowLicense">&#9878; Show License</button>
+<label for="AddDesktopLink" title="This option creates a desktop link to the application">
+<input id="AddDesktopLink" type="checkbox" checked>on desktop</label>
+<label for="AddToStartMenu" title="This option adds the application to the start menu">
+<input id="AddToStartMenu" type="checkbox" checked>in start menu</label>
+<button id="ShowLicense" title="BSD-3-Clause">&#9878; Show License</button>
 </div>
 </body>

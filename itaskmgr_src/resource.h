@@ -26,6 +26,7 @@
 #define IDC_LV_PROCESS                  1001
 #define IDC_GRAPH                       1003
 #define IDC_TAB                         1007
+#define IDC_STAY_ON_TOP                 1008
 #define IDC_SCROLLBAR                   1009
 #define IDC_TERMINATE                   1010
 #define IDC_CPU_DRAW                    1011

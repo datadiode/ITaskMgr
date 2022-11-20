@@ -24,6 +24,7 @@ typedef struct _ThreadPack
 	HANDLE hIdleThread[CPUCORE_MAX];
 	
 	HWND hwndTab;
+	HWND hwndStayOnTop;
 	HWND hwndProcessList;
 	HWND hwndCpupower;
 	HWND hwndTaskList;

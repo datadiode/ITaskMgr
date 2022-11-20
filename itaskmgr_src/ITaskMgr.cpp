@@ -10,7 +10,7 @@ INT_PTR CALLBACK DlgProcTask(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
 INT_PTR CALLBACK DlgProcInfo(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
 
 #ifdef _WIN32_WCE
-#define MAIN_DLG_CX 240
+#define MAIN_DLG_CX 315
 #else
 #define MAIN_DLG_CX 420
 #endif
@@ -27,7 +27,7 @@ static DWORD CALLBACK thIdle(LPVOID pvParams);
 static DWORD GetThreadTick(FILETIME* a, FILETIME* b);
 
 HINSTANCE	g_hInst;
-BOOL		g_bThreadEnd;
+BOOL volatile g_bThreadEnd;
 
 //-----------------------------------------------------------------------------
 // WinMain entry point
@@ -51,8 +51,7 @@ int WINAPI _tWinMain(	HINSTANCE hInstance,
 
 	if( GetLastError() == ERROR_ALREADY_EXISTS )
 	{
-		HWND hwndPrev = FindWindow( L"Dialog" , APPNAME );
-		if( hwndPrev )
+		if (HWND hwndPrev = FindWindow(WC_DIALOG, APPNAME))
 		{
 			ShowWindow(hwndPrev, SW_SHOWNORMAL);
 			SetForegroundWindow(hwndPrev);
@@ -134,20 +133,30 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPara
 
 		SetTimer(hDlg, 1, pTP->dwInterval, NULL);
 
-		ShowWindow(pTP->hwndCpupower, SW_SHOWNORMAL);
-
 		RECT rcWorkArea;
-		UINT uFlags = SystemParametersInfo(SPI_GETWORKAREA, 0, &rcWorkArea, FALSE) ? 0 : SWP_NOMOVE | SWP_NOSIZE;
-
-		SetWindowPos(hDlg, HWND_TOPMOST
-			, (rcWorkArea.right / 2) - (MAIN_DLG_CX / 2)
-			, 0
-			, MAIN_DLG_CX
-			, (rcWorkArea.bottom > 240) ? 240 : rcWorkArea.bottom
-			, 0);
+		if (SystemParametersInfo(SPI_GETWORKAREA, 0, &rcWorkArea, FALSE))
+		{
+			SetWindowPos(hDlg, NULL
+				, (rcWorkArea.right / 2) - (MAIN_DLG_CX / 2)
+				, 0
+				, MAIN_DLG_CX
+				, (rcWorkArea.bottom > 240) ? 240 : rcWorkArea.bottom
+				, SWP_NOZORDER);
+		}
 
 		return TRUE;
 	}
+
+	// ----------------------------------------------------------
+	case WM_COMMAND:
+		switch (wParam)
+		{
+		case IDC_STAY_ON_TOP:
+			SetWindowPos(hDlg, IsDlgButtonChecked(hDlg, IDC_STAY_ON_TOP) ?
+				HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+			break;
+		}
+		return TRUE;
 
 	// ----------------------------------------------------------
 	case WM_NOTIFY: 
@@ -159,35 +168,49 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPara
 			&& (lpnmhdr->code == TCN_SELCHANGE))
 		{
 			pTP->nMode = TabCtrl_GetCurSel(pTP->hwndTab);
-			ShowWindow(pTP->hwndCpupower, pTP->nMode == MODE_CPUPOWER ? SW_SHOWNA : SW_HIDE);
-			ShowWindow(pTP->hwndProcessList, pTP->nMode == MODE_PROCESS ? SW_SHOWNA : SW_HIDE);
-			ShowWindow(pTP->hwndTaskList, pTP->nMode == MODE_TASKLIST ? SW_SHOWNA : SW_HIDE);
-			ShowWindow(pTP->hwndInfo, pTP->nMode == MODE_INFO ? SW_SHOWNA : SW_HIDE);
+			SetWindowPos(hDlg, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
 		}
 		break; 
 
 	// ----------------------------------------------------------
-	case WM_SIZE:
-	{ 
-		RECT rc = { 0, 0, LOWORD(lParam), HIWORD(lParam) };
-		TabCtrl_AdjustRect(pTP->hwndTab, FALSE, &rc);
+	case WM_WINDOWPOSCHANGED:
+	{
+		LPWINDOWPOS lpwndpos = (LPWINDOWPOS)lParam;
+
+		RECT rc;
+		GetClientRect(hDlg, &rc);
 
 		// Size the tab control to fit the client area.
-		HDWP hdwp = BeginDeferWindowPos(5);
-		
-		DeferWindowPos(hdwp, pTP->hwndTab, NULL, 0, 0, LOWORD(lParam), HIWORD(lParam), SWP_NOMOVE | SWP_NOZORDER);
+		HDWP hdwp = BeginDeferWindowPos(6);
 
-		DeferWindowPos(hdwp, pTP->hwndProcessList, HWND_TOP,
-			rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, 0);
+		UINT flags = lpwndpos->flags & SWP_NOSIZE ? SWP_NOMOVE | SWP_NOSIZE : 0;
+		if (flags == 0)
+		{
+			RECT rcTab;
+			GetWindowRect(pTP->hwndTab, &rcTab);
+			MapWindowPoints(pTP->hwndStayOnTop, hDlg, (LPPOINT)&rcTab, 1);
+			DeferWindowPos(hdwp, pTP->hwndStayOnTop, NULL,
+				rcTab.left + rc.right - rcTab.right, 0, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+			DeferWindowPos(hdwp, pTP->hwndTab, NULL,
+				rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, SWP_NOMOVE | SWP_NOZORDER);
+			TabCtrl_AdjustRect(pTP->hwndTab, FALSE, &rc);
+		}
 
 		DeferWindowPos(hdwp, pTP->hwndCpupower, HWND_TOP,
-			rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, 0);
+			rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top,
+			flags | (pTP->nMode == MODE_CPUPOWER ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
+
+		DeferWindowPos(hdwp, pTP->hwndProcessList, HWND_TOP,
+			rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top,
+			flags | (pTP->nMode == MODE_PROCESS ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
 
 		DeferWindowPos(hdwp, pTP->hwndTaskList, HWND_TOP,
-			rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, 0);
+			rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top,
+			flags | (pTP->nMode == MODE_TASKLIST ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
 		
 		DeferWindowPos(hdwp, pTP->hwndInfo, HWND_TOP,
-			rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, 0);
+			rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top,
+			flags | (pTP->nMode == MODE_INFO ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
 
 		EndDeferWindowPos(hdwp);
 	}
@@ -254,7 +277,7 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPara
 		default:
 			break;
 		}
-		return 0;
+		break;
 
 	// ----------------------------------------------------------
 	case WM_CLOSE:
@@ -266,15 +289,18 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPara
 		KillTimer(hDlg, 1);
 		if (*shellapi.Shell_NotifyIcon)
 			(*shellapi.Shell_NotifyIcon)(NIM_DELETE, &pTP->nidTrayIcon);
-		g_bThreadEnd/*pTP->bEnd*/ = TRUE;
-		ResumeThread(pTP->hIdleThread);
-		WaitForSingleObject(pTP->hIdleThread, 3000);
-		
-		if(pTP)
+
+		if (pTP)
 		{
+			g_bThreadEnd = TRUE;
+			for (DWORD i = 0; i < pTP->si.dwNumberOfProcessors; ++i)
+			{
+				ResumeThread(pTP->hIdleThread[i]);
+				WaitForSingleObject(pTP->hIdleThread[i], 3000);
+			}
 			LocalFree(pTP);
 		}
-		return 0;
+		break;
 	}
 	
 	return FALSE;
@@ -290,6 +316,8 @@ static BOOL CreateTab(ThreadPack* pTP)
 
 	if( hwndTab == NULL )
 		return FALSE;
+
+	pTP->hwndStayOnTop = GetDlgItem(pTP->hDlg, IDC_STAY_ON_TOP);
 
 	TCITEM tie; 
 

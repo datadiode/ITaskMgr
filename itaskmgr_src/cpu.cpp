@@ -52,9 +52,6 @@ INT_PTR CALLBACK DlgProcCpu(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 	// ----------------------------------------------------------
 	case WM_SIZE:
 	{ 
-		if( pTP == NULL )
-			return 0;
-
 		HWND hwndDraw = GetDlgItem(hDlg, IDC_CPU_DRAW);
 		HWND hwndText = GetDlgItem(hDlg, IDC_CPU_TEXT);
 
@@ -121,7 +118,8 @@ static BOOL ShowCpuStatus(ThreadPack* pTP)
 		return FALSE;
 
 	MEMORYSTATUS ms;
-	TCHAR szFmt[128], *pszFmt = szFmt;
+	TCHAR szTmp[64];
+	TCHAR szFmt[1024], *pszFmt = szFmt;
 
 	HWND hDlg;
 	HWND hwndStatus;
@@ -141,9 +139,11 @@ static BOOL ShowCpuStatus(ThreadPack* pTP)
 	for (DWORD i = 0; i < pTP->si.dwNumberOfProcessors; ++i)
 		pszFmt += wsprintf(pszFmt, _T("\t%d%%"), pTP->chPowHistory[0][i]);
 
-	pszFmt += wsprintf(pszFmt
-		,  _T("\r\nMemory used\t%uKB/%uKB")
-		, dwUsedMem, dwTotalMem);
+	pszFmt += wsprintf(pszFmt, _T("\r\nMemory used\t"));
+	GetNumberFormat(LOCALE_INVARIANT, 0, szTmp, NULL, pszFmt, wsprintf(szTmp, _T("%u"), dwUsedMem) + 10);
+	pszFmt += wsprintf(pszFmt = _tcschr(pszFmt, '.'), _T(" KB / "));
+	GetNumberFormat(LOCALE_INVARIANT, 0, szTmp, NULL, pszFmt, wsprintf(szTmp, _T("%u"), dwTotalMem) + 10);
+	pszFmt += wsprintf(pszFmt = _tcschr(pszFmt, '.'), _T(" KB"));
 
 	SetWindowText(hwndStatus, szFmt);
 	return TRUE;

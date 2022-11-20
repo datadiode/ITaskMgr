@@ -27,6 +27,8 @@ INT_PTR CALLBACK DlgProcTask(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 	// ----------------------------------------------------------
 	case WM_INITDIALOG:
 	{
+		pTP = (ThreadPack*)lParam;
+
 		g_himlIcons = ImageList_Create(GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), ILC_MASK, 1, 1);
 		if( !g_himlIcons )
 			return FALSE;
@@ -46,16 +48,12 @@ INT_PTR CALLBACK DlgProcTask(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 		ListView_SetExtendedListViewStyle(hwndLView, LVS_EX_FULLROWSELECT);
 		InitTaskListViewColumns(hwndLView);
 		DrawTaskView(hwndLView);
-		pTP = (ThreadPack*)lParam;
 		return TRUE;
 	}
 
 	// ----------------------------------------------------------
 	case WM_NOTIFY:
 	{
-		if( pTP == NULL )
-			break;
-		
 		LPNMHDR lpnmhdr;
 		lpnmhdr = (LPNMHDR)lParam;
 		HWND hwndTaskList = GetDlgItem(hDlg, IDC_LV_TASKLIST);
@@ -131,9 +129,6 @@ INT_PTR CALLBACK DlgProcTask(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 	// ----------------------------------------------------------
 	case WM_SIZE:
 	{
-		if( pTP == NULL )
-			return 0;
-		
 		ResizeWindow(hDlg, lParam);
 		return 0;
 	}

@@ -22,21 +22,19 @@ INT_PTR CALLBACK DlgProcProcess(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPara
 	// ----------------------------------------------------------
 	case WM_INITDIALOG:
 	{
+		pTP = (ThreadPack*)lParam;
+
 		HWND hwndLView = GetDlgItem(hDlg, IDC_LV_PROCESS);
 		InitProcessListViewColumns(hwndLView);
 		DrawProcessView(hwndLView);
 
 		ListView_SetExtendedListViewStyle(hwndLView, LVS_EX_FULLROWSELECT);
 
-		pTP = (ThreadPack*)lParam;
 		return TRUE;
 	}
 
 	// ----------------------------------------------------------
 	case WM_NOTIFY:
-		if( pTP == NULL )
-			break;
-		
 		LPNMHDR lpnmhdr;
 		lpnmhdr = (LPNMHDR)lParam;
 
@@ -66,8 +64,6 @@ INT_PTR CALLBACK DlgProcProcess(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPara
 	// ----------------------------------------------------------
 	case WM_SIZE:
 	{
-		if( pTP == NULL )
-			return 0;
 		ResizeWindow(hDlg, lParam);
 		return 0;
 	} 

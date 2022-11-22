@@ -6,6 +6,7 @@
 
 INT_PTR CALLBACK DlgProcCpu(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
 INT_PTR CALLBACK DlgProcProcess(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
+INT_PTR CALLBACK DlgProcThread(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
 INT_PTR CALLBACK DlgProcTask(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
 INT_PTR CALLBACK DlgProcInfo(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
 
@@ -26,7 +27,6 @@ static void Measure(ThreadPack* pTP);
 static DWORD CALLBACK thIdle(LPVOID pvParams);
 static DWORD GetThreadTick(FILETIME* a, FILETIME* b);
 
-HINSTANCE	g_hInst;
 BOOL volatile g_bThreadEnd;
 
 //-----------------------------------------------------------------------------
@@ -44,8 +44,6 @@ int WINAPI _tWinMain(	HINSTANCE hInstance,
 	icex.dwICC  = ICC_LISTVIEW_CLASSES|ICC_TAB_CLASSES|ICC_LISTVIEW_CLASSES;
 	InitCommonControlsEx(&icex); 
 
-	g_hInst = hInstance;
-
 	//------------ Prevent multiple instance  ------------------
 	HANDLE hMutex = CreateMutex(NULL,FALSE,APPNAME);
 
@@ -59,10 +57,8 @@ int WINAPI _tWinMain(	HINSTANCE hInstance,
 		return 0; 
 	}
 
-
-	// g_hInst = hInstance;
-	DialogBox(hInstance, MAKEINTRESOURCE(IDD_MAINDLG), NULL, DlgProc);
-    return 0;
+	DialogBoxParam(hInstance, MAKEINTRESOURCE(IDD_MAINDLG), NULL, DlgProc, (LPARAM)hInstance);
+	return 0;
 }
 static struct shellapi {
 	HMODULE h;
@@ -83,7 +79,9 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPara
 {
 	static ThreadPack* pTP = NULL;
 	LPNMHDR lpnmhdr;
-	
+	RECT rcWorkArea;
+	static UINT topmost = 0;
+
 	switch(Msg)
 	{
 	// ----------------------------------------------------------
@@ -99,9 +97,9 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPara
 		memset(pTP, 0, sizeof(ThreadPack));
 
 		pTP->hDlg = hDlg;
-		g_bThreadEnd/*pTP->bEnd*/ = FALSE;
+		pTP->dwSelectedProcessID = GetCurrentProcessId();
 		pTP->dwInterval = 2000; //sec
-		pTP->g_hInst = g_hInst;
+		pTP->g_hInst = (HINSTANCE)lParam;
 
 		memset(pTP->chPowHistory, -1, sizeof pTP->chPowHistory);
 		memset(pTP->chPowHistory, 0, sizeof *pTP->chPowHistory);
@@ -119,7 +117,6 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPara
 
 		pTP->nMode = MODE_CPUPOWER;
 
-		
 		// make tasktray icons
 		pTP->nidTrayIcon.cbSize				= sizeof(NOTIFYICONDATA);
 		pTP->nidTrayIcon.hIcon				= pTP->hIcon[0];
@@ -133,7 +130,6 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPara
 
 		SetTimer(hDlg, 1, pTP->dwInterval, NULL);
 
-		RECT rcWorkArea;
 		if (SystemParametersInfo(SPI_GETWORKAREA, 0, &rcWorkArea, FALSE))
 		{
 			SetWindowPos(hDlg, NULL
@@ -151,9 +147,23 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPara
 	case WM_COMMAND:
 		switch (wParam)
 		{
-		case IDC_STAY_ON_TOP:
-			SetWindowPos(hDlg, IsDlgButtonChecked(hDlg, IDC_STAY_ON_TOP) ?
-				HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+		case MAKEWPARAM(IDC_STAY_ON_TOP, BN_DBLCLK):
+			if (SystemParametersInfo(SPI_GETWORKAREA, 0, &rcWorkArea, FALSE))
+			{
+				RECT rc;
+				static RECT rcRestored;
+				GetWindowRect(hDlg, &rc);
+				OffsetRect(&rc, rcWorkArea.left - rc.left, rcWorkArea.top - rc.top);
+				if (EqualRect(&rc, &rcWorkArea) && !IsRectEmpty(&rcRestored))
+					rc = rcRestored;
+				else if (GetWindowRect(hDlg, &rcRestored))
+					rc = rcWorkArea;
+				SetWindowPos(hDlg, NULL, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, SWP_NOZORDER);
+			}
+			// fall through
+		case MAKEWPARAM(IDC_STAY_ON_TOP, BN_CLICKED):
+			CheckDlgButton(hDlg, IDC_STAY_ON_TOP, topmost ^= BST_CHECKED);
+			SetWindowPos(hDlg, topmost ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
 			break;
 		}
 		return TRUE;
@@ -163,14 +173,17 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPara
 
 		lpnmhdr = (LPNMHDR)lParam;
 
-		if( (lpnmhdr->hwndFrom == pTP->hwndTab)
-			&& (lpnmhdr->idFrom == IDC_TAB)
-			&& (lpnmhdr->code == TCN_SELCHANGE))
+		if (lpnmhdr->idFrom == IDC_TAB)
 		{
-			pTP->nMode = TabCtrl_GetCurSel(pTP->hwndTab);
-			SetWindowPos(hDlg, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+			switch (lpnmhdr->code)
+			{
+			case TCN_SELCHANGE:
+				pTP->nMode = TabCtrl_GetCurSel(pTP->hwndTab);
+				SetWindowPos(hDlg, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+				break;
+			}
 		}
-		break; 
+		break;
 
 	// ----------------------------------------------------------
 	case WM_WINDOWPOSCHANGED:
@@ -181,7 +194,7 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPara
 		GetClientRect(hDlg, &rc);
 
 		// Size the tab control to fit the client area.
-		HDWP hdwp = BeginDeferWindowPos(6);
+		HDWP hdwp = BeginDeferWindowPos(7);
 
 		UINT flags = lpwndpos->flags & SWP_NOSIZE ? SWP_NOMOVE | SWP_NOSIZE : 0;
 		if (flags == 0)
@@ -203,6 +216,10 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPara
 		DeferWindowPos(hdwp, pTP->hwndProcessList, HWND_TOP,
 			rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top,
 			flags | (pTP->nMode == MODE_PROCESS ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
+
+		DeferWindowPos(hdwp, pTP->hwndThreadList, HWND_TOP,
+			rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top,
+			flags | (pTP->nMode == MODE_THREAD ? SWP_SHOWWINDOW : SWP_HIDEWINDOW));
 
 		DeferWindowPos(hdwp, pTP->hwndTaskList, HWND_TOP,
 			rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top,
@@ -238,6 +255,7 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPara
 			break;
 		}
 		break;
+
 	// ----------------------------------------------------------
 #ifdef _WIN32_WCE
 	case WM_HELP:
@@ -245,7 +263,7 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPara
 		break;
 #else
 	case WM_SYSCOMMAND:
-		switch (wParam)
+		switch (GET_SC_WPARAM(wParam))
 		{
 		case SC_CONTEXTHELP:
 			DialogBox(pTP->g_hInst, MAKEINTRESOURCE(IDD_HELP), hDlg, DlgProcHelp);
@@ -266,13 +284,16 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPara
 		case MODE_ICON:
 			break;
 		case MODE_CPUPOWER:
-			PostMessage(pTP->hwndCpupower, WM_TIMER, wParam, lParam);
+			SetWindowPos(pTP->hwndCpupower, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
 			break;
 		case MODE_PROCESS:
-			PostMessage(pTP->hwndProcessList, WM_TIMER, wParam, lParam);
+			SetWindowPos(pTP->hwndProcessList, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+			break;
+		case MODE_THREAD:
+			SetWindowPos(pTP->hwndThreadList, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
 			break;
 		case MODE_TASKLIST:
-			PostMessage(pTP->hwndTaskList, WM_TIMER, wParam, lParam);
+			SetWindowPos(pTP->hwndTaskList, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
 			break;
 		default:
 			break;
@@ -330,7 +351,7 @@ static BOOL CreateTab(ThreadPack* pTP)
 	if(TabCtrl_InsertItem(hwndTab, MODE_CPUPOWER, &tie) == -1)
 		return FALSE;
 
-	HWND const hwndCpupower = CreateDialogParam( pTP->g_hInst, MAKEINTRESOURCE(IDD_CPU), pTP->hDlg, DlgProcCpu, (LPARAM)pTP );
+	HWND const hwndCpupower = CreateDialogParam(pTP->g_hInst, MAKEINTRESOURCE(IDD_CPU), pTP->hDlg, DlgProcCpu, (LPARAM)pTP);
 
 	if( hwndCpupower == NULL )
 		return FALSE;
@@ -341,17 +362,28 @@ static BOOL CreateTab(ThreadPack* pTP)
 	if(TabCtrl_InsertItem(hwndTab, MODE_PROCESS, &tie) == -1)
 		return FALSE;
 
-	HWND const hwndProcessList = CreateDialogParam( pTP->g_hInst, MAKEINTRESOURCE(IDD_PROCESS_LIST), pTP->hDlg, DlgProcProcess, (LPARAM)pTP );
+	HWND const hwndProcessList = CreateDialogParam(pTP->g_hInst, MAKEINTRESOURCE(IDD_PROCESS_LIST), pTP->hDlg, DlgProcProcess, (LPARAM)pTP);
 
 	if( hwndProcessList == NULL )
 		return FALSE;
 	
+	// ---------------------------------------------------- THREADLIST
+	tie.pszText = _T("Thread");
+
+	if(TabCtrl_InsertItem(hwndTab, MODE_THREAD, &tie) == -1)
+		return FALSE;
+
+	HWND const hwndThreadList = CreateDialogParam(pTP->g_hInst, MAKEINTRESOURCE(IDD_THREAD_LIST), pTP->hDlg, DlgProcThread, (LPARAM)pTP);
+
+	if (hwndThreadList == NULL)
+		return FALSE;
+
 	// ---------------------------------------------------- TASKLIST
 	tie.pszText = _T("Task");
 	if(TabCtrl_InsertItem(hwndTab, MODE_TASKLIST, &tie) == -1)
 		return FALSE;
 
-	HWND const hwndTaskList = CreateDialogParam( pTP->g_hInst, MAKEINTRESOURCE(IDD_TASK_LIST), pTP->hDlg, DlgProcTask, (LPARAM)pTP );
+	HWND const hwndTaskList = CreateDialogParam(pTP->g_hInst, MAKEINTRESOURCE(IDD_TASK_LIST), pTP->hDlg, DlgProcTask, (LPARAM)pTP);
 
 	if( hwndTaskList == NULL )
 		return FALSE;
@@ -368,8 +400,9 @@ static BOOL CreateTab(ThreadPack* pTP)
 
 	// ---------------------------------------------------- ADD
 
-	pTP->hwndProcessList = hwndProcessList;
 	pTP->hwndCpupower = hwndCpupower;
+	pTP->hwndProcessList = hwndProcessList;
+	pTP->hwndThreadList = hwndThreadList;
 	pTP->hwndTaskList = hwndTaskList;
 	pTP->hwndInfo = hwndInfo;
 
@@ -460,7 +493,7 @@ static DWORD CALLBACK thIdle(LPVOID pvParams)
 {
 	ThreadPack* pTP = (ThreadPack*)pvParams;
 
-	while(!g_bThreadEnd/*pTP->bEnd*/);
+	while(!g_bThreadEnd);
 
 	return 0;
 }
@@ -513,24 +546,15 @@ static INT_PTR CALLBACK DlgProcHelp(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM l
 //-----------------------------------------------------------------------------
 LPARAM GetSelectedItemLParam(HWND hwndLView)
 {
-	int nIndex = -1;
 	LVITEM lvItem;
 	memset(&lvItem, 0, sizeof(LVITEM));
 	lvItem.mask = LVIF_PARAM;
-	
-	nIndex = ListView_GetNextItem(hwndLView, nIndex, 0);
+	lvItem.iItem = ListView_GetNextItem(hwndLView, -1, LVNI_SELECTED);
 
-	while( nIndex != -1 )
-	{
-		lvItem.iItem = nIndex;
-		if( ListView_GetItemState(hwndLView, nIndex, LVIS_SELECTED) )
-		{
-			ListView_GetItem(hwndLView, &lvItem);
-			return lvItem.lParam;
-		}
-		nIndex = ListView_GetNextItem(hwndLView, nIndex, 0);
-	}
-	return 0;
+	if (lvItem.iItem != -1)
+		ListView_GetItem(hwndLView, &lvItem);
+
+	return lvItem.lParam;
 }
 
 //-----------------------------------------------------------------------------
@@ -549,8 +573,33 @@ void SelectItemLParam(HWND hwndLView, LPARAM lParam)
 
 	if (nIndex != -1)
 	{
-		ListView_SetItemState(hwndLView, nIndex, LVIS_SELECTED, LVIS_SELECTED);
+		ListView_SetItemState(hwndLView, nIndex, LVIS_FOCUSED | LVIS_SELECTED, LVIS_FOCUSED | LVIS_SELECTED);
 		ListView_EnsureVisible(hwndLView, nIndex, FALSE);
+	}
+}
+
+//-----------------------------------------------------------------------------
+// delete excess items by lParam
+//-----------------------------------------------------------------------------
+void DeleteExcessItemsLParam(HWND hwndLView, LPARAM* plParam, int n)
+{
+	LVITEM lvItem;
+	memset(&lvItem, 0, sizeof lvItem);
+	lvItem.mask = LVIF_PARAM;
+	lvItem.iItem = ListView_GetItemCount(hwndLView);
+	while (lvItem.iItem-- && ListView_GetItem(hwndLView, &lvItem))
+	{
+		int i;
+		for (i = 0; i < n; ++i)
+			if (plParam[i] == lvItem.lParam)
+				break;
+		if (i == n)
+			ListView_DeleteItem(hwndLView, lvItem.iItem);
+	}
+
+	if (GetSelectedItemLParam(hwndLView) == 0)
+	{
+		ListView_SetItemState(hwndLView, 0, LVIS_FOCUSED | LVIS_SELECTED, LVIS_FOCUSED | LVIS_SELECTED);
 	}
 }
 

@@ -24,10 +24,14 @@
 #define CloseToolhelp32Snapshot CloseHandle
 #define Heap32First(hSnapshot, lphe, th32ProcessID, th32HeapID) Heap32First(lphe, th32ProcessID, th32HeapID)
 #define Heap32Next(hSnapshot, lphe) Heap32Next(lphe)
+#define CeGetProcessAffinity(hThread, lpProcessAffinity) (FALSE)
+#define CeGetThreadAffinity(hThread, lpProcessAffinity) (FALSE)
 #define CeSetThreadAffinity(hThread, dwProcessor) SetThreadAffinityMask(hThread, dwProcessor)
 #else
 #define WC_DIALOG L"Dialog"
 #if _WIN32_WCE <= 0x600
+#define CeGetProcessAffinity(hThread, lpProcessAffinity) (FALSE)
+#define CeGetThreadAffinity(hThread, lpProcessAffinity) (FALSE)
 #define CeSetThreadAffinity(hThread, dwProcessor) (FALSE)
 #endif
 #endif

@@ -402,6 +402,10 @@
 				RelativePath=".\tasklist.cpp"
 				>
 			</File>
+			<File
+				RelativePath=".\thread.cpp"
+				>
+			</File>
 		</Filter>
 	</Files>
 	<Globals>

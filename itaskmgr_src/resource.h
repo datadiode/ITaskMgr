@@ -9,6 +9,7 @@
 #define IDD_TASK_LIST                   104
 #define IDD_SYSTEM_INFO                 105
 #define IDI_MAIN                        106
+#define IDD_THREAD_LIST                 107
 #define IDD_HELP                        109
 #define IDI_DEFAULT_SMALLICON           110
 #define IDI_CPU_00                      200
@@ -24,6 +25,7 @@
 #define IDI_CPU_10                      210
 #define IDI_CPU_11                      211
 #define IDC_LV_PROCESS                  1001
+#define IDC_LV_THREAD                   1002
 #define IDC_GRAPH                       1003
 #define IDC_TAB                         1007
 #define IDC_STAY_ON_TOP                 1008

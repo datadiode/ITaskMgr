@@ -342,6 +342,7 @@
     <ClCompile Include="process.cpp" />
     <ClCompile Include="StdAfx.cpp" />
     <ClCompile Include="tasklist.cpp" />
+    <ClCompile Include="thread.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ITaskMgr.h" />

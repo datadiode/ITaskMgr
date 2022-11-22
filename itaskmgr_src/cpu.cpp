@@ -29,13 +29,9 @@ INT_PTR CALLBACK DlgProcCpu(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 		hpenMagenta = CreatePen(PS_SOLID, 1, RGB(255, 0, 255));
 		hpenYellow = CreatePen(PS_SOLID, 1, RGB(255, 255, 0));
 
-		HWND hwndText = GetDlgItem(hDlg, IDC_CPU_TEXT);
 		static UINT const tabstop = 20;
-		SendMessage(hwndText, EM_SETTABSTOPS, 1, (LPARAM)&tabstop);
+		SendDlgItemMessage(hDlg, IDC_CPU_TEXT, EM_SETTABSTOPS, 1, (LPARAM)&tabstop);
 
-		HWND hwndDraw = GetDlgItem(hDlg, IDC_CPU_DRAW);
-		DrawGraph(pTP, hwndDraw);
-		ShowCpuStatus(pTP);
 		return TRUE;
 	}
 
@@ -94,12 +90,13 @@ INT_PTR CALLBACK DlgProcCpu(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 		return TRUE;
 	}
 
-	case WM_TIMER:
-	{
-		ShowCpuStatus(pTP);
-		InvalidateRect(GetDlgItem(hDlg, IDC_CPU_DRAW), NULL, FALSE);
+	case WM_WINDOWPOSCHANGED:
+		if (((LPWINDOWPOS)lParam)->flags & (SWP_SHOWWINDOW | SWP_FRAMECHANGED))
+		{
+			ShowCpuStatus(pTP);
+			InvalidateRect(GetDlgItem(hDlg, IDC_CPU_DRAW), NULL, FALSE);
+		}
 		break;
-	}
 
 	default:
 		break;

@@ -2,17 +2,15 @@
 #include "ITaskMgr.h"
 #include "resource.h"
 
-static BOOL InitTaskListViewColumns(HWND hwndLView);
-static BOOL DrawTaskView(HWND hwndLView);
+static void InitTaskListViewColumns(HWND hwndLView);
+static void DrawTaskView(HWND hwndLView);
 static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam);
 static BOOL InsertTaskItem(HWND hwndLView, HWND hwndEnum);
-static BOOL DeleteTaskItem(HWND hwndLView, HWND* phwndEnumWins);
 static void ResizeWindow(HWND hDlg, LPARAM lParam);
 
-extern HINSTANCE	g_hInst;
 HIMAGELIST g_himlIcons;
 HICON g_hDefaultIcon;
-DWORD g_nDefaultIconIndex;
+int g_nDefaultIconIndex;
 
 //-----------------------------------------------------------------------------
 // process listview dialog
@@ -26,14 +24,13 @@ INT_PTR CALLBACK DlgProcTask(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 
 	// ----------------------------------------------------------
 	case WM_INITDIALOG:
-	{
 		pTP = (ThreadPack*)lParam;
 
 		g_himlIcons = ImageList_Create(GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), ILC_MASK, 1, 1);
 		if( !g_himlIcons )
 			return FALSE;
 
-		g_hDefaultIcon = (HICON)LoadImage(g_hInst, MAKEINTRESOURCE(IDI_DEFAULT_SMALLICON),
+		g_hDefaultIcon = (HICON)LoadImage(pTP->g_hInst, MAKEINTRESOURCE(IDI_DEFAULT_SMALLICON),
 			IMAGE_ICON, SM_CYSMICON, SM_CYSMICON, 0);
 		
 		if( !g_hDefaultIcon )
@@ -44,131 +41,112 @@ INT_PTR CALLBACK DlgProcTask(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 		if( g_nDefaultIconIndex == -1 )
 			return FALSE;
 
-		HWND hwndLView = GetDlgItem(hDlg, IDC_LV_TASKLIST);
-		ListView_SetExtendedListViewStyle(hwndLView, LVS_EX_FULLROWSELECT);
-		InitTaskListViewColumns(hwndLView);
-		DrawTaskView(hwndLView);
+		if (HWND hwndLView = GetDlgItem(hDlg, IDC_LV_TASKLIST))
+		{
+			ListView_SetExtendedListViewStyle(hwndLView, LVS_EX_FULLROWSELECT);
+			ListView_SetImageList(hwndLView, g_himlIcons, LVSIL_SMALL);
+			InitTaskListViewColumns(hwndLView);
+		}
 		return TRUE;
-	}
 
 	// ----------------------------------------------------------
 	case WM_NOTIFY:
-	{
-		LPNMHDR lpnmhdr;
-		lpnmhdr = (LPNMHDR)lParam;
-		HWND hwndTaskList = GetDlgItem(hDlg, IDC_LV_TASKLIST);
-
-		if( (lpnmhdr->hwndFrom == hwndTaskList)
-			&& (lpnmhdr->idFrom == IDC_LV_TASKLIST) )
+		if (((LPNMHDR)lParam)->idFrom == IDC_LV_TASKLIST)
 		{
-
-			switch( lpnmhdr->code )
+			LPNMLISTVIEW lpnmlv = (LPNMLISTVIEW)lParam;
+			LVITEM lvItem;
+			switch (lpnmlv->hdr.code)
 			{
 			case NM_DBLCLK:
-			{
-				LPARAM lParam;
-				HWND hwndProcessList;
-				DWORD dwProcessID;
-				NMHDR nmh;
-				
-				lParam = GetSelectedItemLParam(hwndTaskList);
-				
-				GetWindowThreadProcessId((HWND)lParam, &dwProcessID);
-				hwndProcessList = GetDlgItem(pTP->hwndProcessList, IDC_LV_PROCESS);
-				
-				SelectItemLParam(hwndProcessList, dwProcessID);
-				TabCtrl_SetCurSel(pTP->hwndTab, MODE_PROCESS);
-
-				nmh.hwndFrom = pTP->hwndTab;
-				nmh.idFrom = IDC_TAB;
-				nmh.code = TCN_SELCHANGE;
-				SendMessage(pTP->hDlg, WM_NOTIFY, 0, (LPARAM)&nmh);
-				SetFocus(hwndProcessList);
-
-				return 0;
-			}
-
-			case NM_CLICK:
+				if (HWND hwndTarget = (HWND)GetSelectedItemLParam(lpnmlv->hdr.hwndFrom))
+				{
+					DWORD dwProcessID;
+					if (GetWindowThreadProcessId(hwndTarget, &dwProcessID))
+					{
+						TabCtrl_SetCurSel(pTP->hwndTab, MODE_PROCESS);
+						NMHDR nmh = { pTP->hwndTab, IDC_TAB, TCN_SELCHANGE };
+						SendMessage(pTP->hDlg, WM_NOTIFY, 0, (LPARAM)&nmh);
+						HWND hwndProcessList = GetDlgItem(pTP->hwndProcessList, IDC_LV_PROCESS);
+						SelectItemLParam(hwndProcessList, dwProcessID);
+						SetFocus(hwndProcessList);
+					}
+				}
 				break;
 
-			default:
+			case LVN_DELETEITEM:
+				lvItem.mask = LVIF_IMAGE;
+				lvItem.iItem = lpnmlv->iItem;
+				lvItem.iSubItem = 0;
+				ListView_GetItem(lpnmlv->hdr.hwndFrom, &lvItem);
+				int nDeleteIconIndex = lvItem.iImage;
+				if (nDeleteIconIndex != g_nDefaultIconIndex)
+				{
+					ImageList_Remove(g_himlIcons, nDeleteIconIndex);
+					// refresh icon
+					int nIndex = -1;
+					while ((nIndex = ListView_GetNextItem(lpnmlv->hdr.hwndFrom, nIndex, 0)) != -1)
+					{
+						lvItem.iItem = nIndex;
+						ListView_GetItem(lpnmlv->hdr.hwndFrom, &lvItem);
+						if (lvItem.iImage >= nDeleteIconIndex)
+						{
+							lvItem.iImage--;
+							ListView_SetItem(lpnmlv->hdr.hwndFrom, &lvItem);
+						}
+					}
+				}
 				break;
 			}
 		}
 		break; 
-	}
 
 	// ----------------------------------------------------------
 	case WM_COMMAND:
-	{
-		HWND hwndLView, hwndTarget;
-		hwndLView = GetDlgItem(hDlg, IDC_LV_TASKLIST);
-		hwndTarget = (HWND)GetSelectedItemLParam(hwndLView);
-
-		switch( LOWORD(wParam) )
+		if (HWND hwndTarget = (HWND)GetSelectedItemLParam(GetDlgItem(hDlg, IDC_LV_TASKLIST)))
 		{
-		case IDC_TASK_CLOSE:
-			if( hwndTarget )
-				PostMessage(hwndTarget, WM_CLOSE, 0, 0);
-			break;
-		
-		case IDC_TASK_SWITCH:
-			if( hwndTarget )
+			switch (LOWORD(wParam))
 			{
+			case IDC_TASK_CLOSE:
+				PostMessage(hwndTarget, WM_CLOSE, 0, 0);
+				break;
+		
+			case IDC_TASK_SWITCH:
 				ShowWindow(pTP->hDlg, SW_MINIMIZE);
 				SetForegroundWindow(hwndTarget);
+				break;
 			}
-			break;
-
-		default:
-			break;
 		}
-		return 0;
-	}
+		break;
 
 	// ----------------------------------------------------------
 	case WM_SIZE:
-	{
 		ResizeWindow(hDlg, lParam);
-		return 0;
-	}
+		break;
 
 	// ----------------------------------------------------------
 	case WM_DESTROY:
 		ImageList_Destroy(g_himlIcons);
-		return 0;
+		break;
 
 	// ----------------------------------------------------------
-	case WM_TIMER:
-	{
-		HWND hwndLView = GetDlgItem(hDlg, IDC_LV_TASKLIST);
-		DrawTaskView(hwndLView);
-		return 0;
+	case WM_WINDOWPOSCHANGED:
+		if (((LPWINDOWPOS)lParam)->flags & (SWP_SHOWWINDOW | SWP_FRAMECHANGED))
+		{
+			HWND hwndLView = GetDlgItem(hDlg, IDC_LV_TASKLIST);
+			DrawTaskView(hwndLView);
+		}
+		break;
 	}
 
-	// ----------------------------------------------------------
-	}	
 	return FALSE;
-
 }
 
 
 //-----------------------------------------------------------------------------
 // make columns header
 //-----------------------------------------------------------------------------
-static BOOL InitTaskListViewColumns(HWND hwndLView)
+static void InitTaskListViewColumns(HWND hwndLView)
 {
-	if( hwndLView == NULL )
-		return FALSE;
-
-	if(g_himlIcons == NULL)
-		return FALSE;
-	
-	ListView_SetImageList(hwndLView, g_himlIcons, LVSIL_SMALL); 
-
-	RECT rcLView;
-	GetClientRect(hwndLView, &rcLView);
-
 	LVCOLUMN lvc;
 
 	lvc.mask = LVCF_FMT | LVCF_WIDTH | LVCF_TEXT | LVCF_SUBITEM; 
@@ -178,38 +156,25 @@ static BOOL InitTaskListViewColumns(HWND hwndLView)
 	lvc.pszText = _T("Task");
 	lvc.fmt = LVCFMT_LEFT;
 
-	if (ListView_InsertColumn(hwndLView, 0, &lvc) == -1)
-		return FALSE;
-
-	ListView_SetColumnWidth(hwndLView, 0, rcLView.right-20);
-
-    return TRUE; 
+	ListView_InsertColumn(hwndLView, 0, &lvc);
 }
 
 //-----------------------------------------------------------------------------
 // 
 //-----------------------------------------------------------------------------
-static BOOL DrawTaskView(HWND hwndLView)
+static void DrawTaskView(HWND hwndLView)
 {
 	HWND hwndEnum[256];
-	memset(hwndEnum, 0, sizeof(HWND)*256);
+	memset(hwndEnum, 0, sizeof hwndEnum);
 	EnumWindows(EnumWindowsProc, (LPARAM)hwndEnum);
 
-	HWND* pWnd = hwndEnum;
-
-	for( int ii = 0; ii < 256 && *pWnd != 0; ii++, pWnd++)
+	int n = 0;
+	while (n < _countof(hwndEnum) && hwndEnum[n])
 	{
-		InsertTaskItem(hwndLView, *pWnd);
+		InsertTaskItem(hwndLView, hwndEnum[n++]);
 	}
 
-	DeleteTaskItem(hwndLView, hwndEnum);
-
-	if( 0 == GetSelectedItemLParam(hwndLView) )
-	{
-		ListView_SetItemState(hwndLView, 0, LVIS_SELECTED, LVIS_SELECTED);
-	}
-
-	return TRUE;
+	DeleteExcessItemsLParam(hwndLView, (LPARAM*)hwndEnum, n);
 }
 
 //-----------------------------------------------------------------------------
@@ -304,72 +269,6 @@ static BOOL InsertTaskItem(HWND hwndLView, HWND hwndEnum)
 		return FALSE;
 	}
 
-	return TRUE;
-}
-
-//-----------------------------------------------------------------------------
-// 
-//-----------------------------------------------------------------------------
-static BOOL DeleteTaskItem(HWND hwndLView, HWND* phwndEnumWins)
-{
-	int nIndex = -1;
-	int ii = 0;
-	nIndex = ListView_GetNextItem(hwndLView, nIndex, 0);
-
-	LVITEM lvItem;
-	memset(&lvItem, 0, sizeof(LVITEM));
-
-	lvItem.mask = LVIF_PARAM|LVIF_IMAGE;
-	
-	while( nIndex != -1 )
-	{
-		lvItem.iItem = nIndex;
-		ListView_GetItem(hwndLView, &lvItem);
-
-		ii = 0;
-		BOOL fDelete = TRUE;
-		do
-		{
-			if( phwndEnumWins[ii++] == (HWND)lvItem.lParam )
-			{
-				fDelete = FALSE;
-				break;
-			}
-		}while( phwndEnumWins[ii] );
-
-		if( fDelete )
-		{
-			DWORD dwDeleteIndex = nIndex;
-			DWORD dwDelteIconIndex = lvItem.iImage;
-
-			ListView_DeleteItem(hwndLView, dwDeleteIndex);
-			
-			if( dwDelteIconIndex != g_nDefaultIconIndex )
-			{
-				ImageList_Remove(g_himlIcons, dwDelteIconIndex);
-
-				// reflesh icon
-				nIndex = ListView_GetNextItem(hwndLView, -1, 0);
-
-				while( nIndex != -1 )
-				{
-					lvItem.iItem = nIndex;
-					ListView_GetItem(hwndLView, &lvItem);
-					
-					if( lvItem.iImage >= (LPARAM)dwDelteIconIndex )
-					{
-						lvItem.iImage--;
-						ListView_SetItem(hwndLView, &lvItem);
-					}
-					nIndex = ListView_GetNextItem(hwndLView, nIndex, 0);
-				}
-			}
-			
-			nIndex = -1;
-		}
-
-		nIndex = ListView_GetNextItem(hwndLView, nIndex, 0);
-	}
 	return TRUE;
 }
 

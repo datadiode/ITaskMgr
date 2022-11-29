@@ -175,19 +175,17 @@ static BOOL InsertProcessItem(HWND hwndLView, PROCESSENTRY32* ppe32)
 {
 	// search item
 	LVFINDINFO finditem;
-	memset(&finditem, 0, sizeof finditem);
-	
 	finditem.flags = LVFI_PARAM;
 	finditem.lParam = ppe32->th32ProcessID;
 
-	DWORD dwIndex = ListView_FindItem(hwndLView, -1, &finditem);
+	int nIndex = ListView_FindItem(hwndLView, -1, &finditem);
 
 	TCHAR szFmt[256];
 
-	if (dwIndex == -1)
+	if (nIndex == -1)
 	{
 		LVITEM lvItem;
-		memset(&lvItem, 0, sizeof(LVITEM));
+		memset(&lvItem, 0, sizeof lvItem);
 
 		lvItem.mask = LVIF_TEXT | LVIF_PARAM;
 		lvItem.iItem = 0;
@@ -195,9 +193,9 @@ static BOOL InsertProcessItem(HWND hwndLView, PROCESSENTRY32* ppe32)
 		lvItem.pszText = ppe32->szExeFile;
 		lvItem.lParam = ppe32->th32ProcessID;
 
-		dwIndex = ListView_InsertItem(hwndLView, &lvItem);
+		nIndex = ListView_InsertItem(hwndLView, &lvItem);
 
-		if( dwIndex == -1 )
+		if (nIndex == -1)
 		{
 			return FALSE;
 		}
@@ -206,26 +204,26 @@ static BOOL InsertProcessItem(HWND hwndLView, PROCESSENTRY32* ppe32)
 
 		// id
 		wsprintf(szFmt, _T("%08X"), ppe32->th32ProcessID);
-		ListView_SetItemText( hwndLView, dwIndex, 1, szFmt );
+		ListView_SetItemText(hwndLView, nIndex, 1, szFmt);
 	}
 
 	// Add volatile subitems
 
 	// priority
 	wsprintf(szFmt, _T("%d"), ppe32->pcPriClassBase);
-	ListView_SetItemText(hwndLView, dwIndex, 2, szFmt);
+	ListView_SetItemText(hwndLView, nIndex, 2, szFmt);
 
 	// affinity
 	DWORD dwAffinity;
 	if (CeGetProcessAffinity((HANDLE)ppe32->th32ProcessID, &dwAffinity))
 	{
 		wsprintf(szFmt, _T("%02X"), dwAffinity);
-		ListView_SetItemText(hwndLView, dwIndex, 3, szFmt);
+		ListView_SetItemText(hwndLView, nIndex, 3, szFmt);
 	}
 
 	// threads
 	wsprintf(szFmt, _T("%d"), ppe32->cntThreads);
-	ListView_SetItemText(hwndLView, dwIndex, 4, szFmt);
+	ListView_SetItemText(hwndLView, nIndex, 4, szFmt);
 
 	return TRUE;
 }

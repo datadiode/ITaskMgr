@@ -8,9 +8,9 @@ static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam);
 static BOOL InsertTaskItem(HWND hwndLView, HWND hwndEnum);
 static void ResizeWindow(HWND hDlg, LPARAM lParam);
 
-HIMAGELIST g_himlIcons;
-HICON g_hDefaultIcon;
-int g_nDefaultIconIndex;
+static HIMAGELIST g_himlIcons;
+static HICON g_hDefaultIcon;
+static int g_nDefaultIconIndex;
 
 //-----------------------------------------------------------------------------
 // process listview dialog
@@ -26,23 +26,15 @@ INT_PTR CALLBACK DlgProcTask(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 	case WM_INITDIALOG:
 		pTP = (ThreadPack*)lParam;
 
-		g_himlIcons = ImageList_Create(GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), ILC_MASK, 1, 1);
-		if( !g_himlIcons )
-			return FALSE;
-
-		g_hDefaultIcon = (HICON)LoadImage(pTP->g_hInst, MAKEINTRESOURCE(IDI_DEFAULT_SMALLICON),
-			IMAGE_ICON, SM_CYSMICON, SM_CYSMICON, 0);
-		
-		if( !g_hDefaultIcon )
-			return FALSE;
-
-		g_nDefaultIconIndex = ImageList_AddIcon(g_himlIcons, g_hDefaultIcon);
-
-		if( g_nDefaultIconIndex == -1 )
-			return FALSE;
-
 		if (HWND hwndLView = GetDlgItem(hDlg, IDC_LV_TASKLIST))
 		{
+			int const cx = GetSystemMetrics(SM_CXSMICON);
+			int const cy = GetSystemMetrics(SM_CYSMICON);
+
+			g_himlIcons = ImageList_Create(cx, cy, ILC_MASK, 1, 1);
+			g_hDefaultIcon = (HICON)LoadImage(pTP->g_hInst, MAKEINTRESOURCE(IDI_DEFAULT_SMALLICON), IMAGE_ICON, cx, cy, 0);
+			g_nDefaultIconIndex = ImageList_AddIcon(g_himlIcons, g_hDefaultIcon);
+
 			ListView_SetExtendedListViewStyle(hwndLView, LVS_EX_FULLROWSELECT);
 			ListView_SetImageList(hwndLView, g_himlIcons, LVSIL_SMALL);
 			InitTaskListViewColumns(hwndLView);
@@ -213,58 +205,40 @@ static BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam)
 //-----------------------------------------------------------------------------
 static BOOL InsertTaskItem(HWND hwndLView, HWND hwndEnum)
 {
-	if(hwndLView == NULL || hwndEnum == NULL)
-		return FALSE;
-
-	DWORD dwItemIndex;
-	DWORD dwIconIndex;
-	TCHAR szWinText[256];
-
 	// serch item
 	LVFINDINFO finditem;
-	memset(&finditem, 0, sizeof(LVFINDINFO));
-	
 	finditem.flags = LVFI_PARAM;
 	finditem.lParam = (LPARAM)hwndEnum;
 
-	dwItemIndex = ListView_FindItem(hwndLView, -1, &finditem);
+	int nItemIndex = ListView_FindItem(hwndLView, -1, &finditem);
 
-	if( dwItemIndex != -1 )
+	if (nItemIndex != -1)
 	{
 		return FALSE;
 	}
 
 	LVITEM lvItem;
-	memset(&lvItem, 0, sizeof(LVITEM));
-	GetWindowText(hwndEnum, szWinText, 256);
+	memset(&lvItem, 0, sizeof lvItem);
 
-	HICON hIcon;
-	hIcon = (HICON)SendMessage(hwndEnum, WM_GETICON, ICON_SMALL, ICON_SMALL);
-	
-	if( hIcon == NULL )
+	TCHAR szWinText[256];
+	GetWindowText(hwndEnum, szWinText, _countof(szWinText));
+
+	int nIconIndex = -1;
+	if (HICON hIcon = (HICON)SendMessage(hwndEnum, WM_GETICON, ICON_SMALL, ICON_SMALL))
 	{
-		dwIconIndex = g_nDefaultIconIndex;
-	}
-	else
-	{
-		dwIconIndex = ImageList_AddIcon(g_himlIcons, hIcon);
+		nIconIndex = ImageList_AddIcon(g_himlIcons, hIcon);
 	}
 
-	if( dwIconIndex == -1 )
-	{
-		dwIconIndex = g_nDefaultIconIndex;
-	}
-
-	lvItem.mask = LVIF_TEXT|LVIF_PARAM|LVIF_IMAGE;
-	lvItem.iImage = dwIconIndex;
+	lvItem.mask = LVIF_TEXT | LVIF_PARAM | LVIF_IMAGE;
+	lvItem.iImage = nIconIndex != -1 ? nIconIndex : g_nDefaultIconIndex;
 	lvItem.iItem = 0xFF;
 	lvItem.iSubItem = 0;
 	lvItem.pszText = szWinText;
 	lvItem.lParam = (LPARAM)hwndEnum;
 
-	dwItemIndex = ListView_InsertItem(hwndLView, &lvItem);
+	nItemIndex = ListView_InsertItem(hwndLView, &lvItem);
 
-	if( dwItemIndex == -1 )
+	if (nItemIndex == -1)
 	{
 		return FALSE;
 	}

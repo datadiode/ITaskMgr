@@ -2,6 +2,21 @@
 //
 
 #include "stdafx.h"
+
+static struct atomapi {
+	HMODULE h;
+	DllImport<ATOM(WINAPI*)(LPCWSTR)> GlobalAddAtom;
+} const atomapi = {
+#ifdef _WIN32_WCE
+	GetModuleHandle(_T("COREDLL.DLL")),
+#else
+	GetModuleHandle(_T("KERNEL32.DLL")),
+#endif
+	GetProcAddressA(atomapi.h, "GlobalAddAtomW"),
+};
+
+#define GlobalAddAtom(string) ((*atomapi.GlobalAddAtom) ? (*atomapi.GlobalAddAtom)(string) : 0)
+
 #include "ITaskMgr.h"
 
 INT_PTR CALLBACK DlgProcCpu(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam);
@@ -60,6 +75,7 @@ int WINAPI _tWinMain(	HINSTANCE hInstance,
 	DialogBoxParam(hInstance, MAKEINTRESOURCE(IDD_MAINDLG), NULL, DlgProc, (LPARAM)hInstance);
 	return 0;
 }
+
 static struct shellapi {
 	HMODULE h;
 	DllImport<BOOL(WINAPI*)(DWORD, NOTIFYICONDATA*)> Shell_NotifyIcon;
@@ -71,6 +87,12 @@ static struct shellapi {
 #endif
 	GetProcAddressA(shellapi.h, _CRT_STRINGIZE(Shell_NotifyIcon)),
 };
+
+static BOOL CALLBACK PropEnumProcEx(HWND hWnd, LPWSTR lpszString, HANDLE, ULONG_PTR)
+{
+	RemoveProp(hWnd, lpszString); // This also implies a GlobalDeleteAtom()
+	return TRUE;
+}
 
 //-----------------------------------------------------------------------------
 // main dialog
@@ -321,6 +343,7 @@ static INT_PTR CALLBACK DlgProc(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPara
 			}
 			LocalFree(pTP);
 		}
+		EnumPropsEx(hDlg, PropEnumProcEx, 0);
 		break;
 	}
 	
@@ -489,12 +512,9 @@ static void Measure(ThreadPack* pTP)
 //-----------------------------------------------------------------------------
 // dummy thread for mesure cpu power
 //-----------------------------------------------------------------------------
-static DWORD CALLBACK thIdle(LPVOID pvParams)
+static DWORD CALLBACK thIdle(LPVOID)
 {
-	ThreadPack* pTP = (ThreadPack*)pvParams;
-
 	while(!g_bThreadEnd);
-
 	return 0;
 }
 
@@ -547,7 +567,7 @@ static INT_PTR CALLBACK DlgProcHelp(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM l
 LPARAM GetSelectedItemLParam(HWND hwndLView)
 {
 	LVITEM lvItem;
-	memset(&lvItem, 0, sizeof(LVITEM));
+	memset(&lvItem, 0, sizeof lvItem);
 	lvItem.mask = LVIF_PARAM;
 	lvItem.iItem = ListView_GetNextItem(hwndLView, -1, LVNI_SELECTED);
 
@@ -562,10 +582,8 @@ LPARAM GetSelectedItemLParam(HWND hwndLView)
 //-----------------------------------------------------------------------------
 void SelectItemLParam(HWND hwndLView, LPARAM lParam)
 {
-	// serch item
+	// search item
 	LVFINDINFO finditem;
-	memset(&finditem, 0, sizeof finditem);
-
 	finditem.flags = LVFI_PARAM;
 	finditem.lParam = lParam;
 
@@ -612,7 +630,9 @@ static BOOL CreateThreads(ThreadPack* pTP)
 	pTP->si.dwNumberOfProcessors;
 	for (DWORD i = 0; i < pTP->si.dwNumberOfProcessors; ++i)
 	{
-		pTP->hIdleThread[i] = CreateThread(NULL, 0, thIdle, pTP, CREATE_SUSPENDED, NULL);
+		DWORD id = 0;
+		pTP->hIdleThread[i] = CreateThread(NULL, 0, thIdle, NULL, CREATE_SUSPENDED, &id);
+		SetThreadName(L"IdleThread", id, pTP->hDlg);
 		SetThreadPriority(pTP->hIdleThread[i], THREAD_PRIORITY_IDLE);
 		CeSetThreadAffinity(pTP->hIdleThread[i], 1 << i);
 		ResumeThread(pTP->hIdleThread[i]);

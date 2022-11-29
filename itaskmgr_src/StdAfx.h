@@ -18,6 +18,8 @@
 #include <tchar.h>
 #include "resource.h"
 
+#undef GlobalAddAtom // GetProcAddress() it so as to not require GWES_ATOM
+
 #ifndef _WIN32_WCE
 #include <psapi.h>
 #define GetProcAddressA GetProcAddress

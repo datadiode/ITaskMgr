@@ -16,7 +16,7 @@ typedef HANDLE ID2TH;
 
 static BOOL DeleteThreadItem(HWND hwndLView, DWORD* pdwThreadIDs);
 static void InitThreadListViewColumns(HWND hwndLView);
-static BOOL InsertThreadItem(HWND hwndLView, THREADENTRY32* pte32);
+static BOOL InsertThreadItem(HWND hDlg, HWND hwndLView, THREADENTRY32* pte32);
 static BOOL DrawThreadView(HWND hwndLView, ThreadPack* pTP);
 static void ResizeWindow(HWND hDlg, LPARAM lParam);
 
@@ -102,7 +102,7 @@ static BOOL DrawThreadView(HWND hwndLView, ThreadPack* pTP)
 	{
 		if (te32.th32OwnerProcessID == pTP->dwSelectedProcessID)
 		{
-			InsertThreadItem(hwndLView, &te32);
+			InsertThreadItem(pTP->hDlg, hwndLView, &te32);
 			lParam[n++] = te32.th32ThreadID;
 		}
 	} while (Thread32Next(hSS, &te32) && (n < PROCESS_MAX));
@@ -146,28 +146,54 @@ static void InitThreadListViewColumns(HWND hwndLView)
 	ListView_InsertColumn(hwndLView, lvc.iSubItem = 4, &lvc);
 	lvc.pszText = _T("utime");
 	ListView_InsertColumn(hwndLView, lvc.iSubItem = 5, &lvc);
+
+	lvc.fmt = LVCFMT_LEFT;
+	lvc.pszText = _T("name");
+	ListView_InsertColumn(hwndLView, lvc.iSubItem = 6, &lvc);
+}
+
+static BOOL CALLBACK PropEnumProcEx(HWND hWnd, LPWSTR lpszString, HANDLE hData, ULONG_PTR dwData)
+{
+	if (LPWSTR lpszEquals = wcschr(lpszString, L'='))
+	{
+		HWND hwndLView = reinterpret_cast<HWND>(dwData);
+
+		LVFINDINFO finditem;
+		finditem.flags = LVFI_PARAM;
+		finditem.lParam = reinterpret_cast<LPARAM>(hData);
+
+		DWORD dwIndex = ListView_FindItem(hwndLView, -1, &finditem);
+		if (dwIndex != -1)
+		{
+			ListView_SetItemText(hwndLView, dwIndex, 6, lpszEquals + 1);
+		}
+	}
+
+	DWORD dwExitCode = 0;
+	if (!GetExitCodeThread((ID2TH)reinterpret_cast<DWORD>(hData), &dwExitCode))
+		RemoveProp(hWnd, lpszString); // This also implies a GlobalDeleteAtom()
+
+	return TRUE;
 }
 
 //-----------------------------------------------------------------------------
 // fill process view
 //-----------------------------------------------------------------------------
-static BOOL InsertThreadItem(HWND hwndLView, THREADENTRY32* pte32)
+static BOOL InsertThreadItem(HWND hDlg, HWND hwndLView, THREADENTRY32* pte32)
 {
-	// serch item
+	// search item
 	LVFINDINFO finditem;
-	memset(&finditem, 0, sizeof finditem);
-	
 	finditem.flags = LVFI_PARAM;
 	finditem.lParam = pte32->th32ThreadID;
 
-	DWORD dwIndex = ListView_FindItem(hwndLView, -1, &finditem);
+	int nIndex = ListView_FindItem(hwndLView, -1, &finditem);
 
 	TCHAR szFmt[256];
 
-	if (dwIndex == -1)
+	if (nIndex == -1)
 	{
 		LVITEM lvItem;
-		memset(&lvItem, 0, sizeof(LVITEM));
+		memset(&lvItem, 0, sizeof lvItem);
 
 		lvItem.mask = LVIF_TEXT | LVIF_PARAM;
 		lvItem.iItem = 0;
@@ -176,9 +202,9 @@ static BOOL InsertThreadItem(HWND hwndLView, THREADENTRY32* pte32)
 		lvItem.lParam = pte32->th32ThreadID;
 
 		wsprintf(szFmt, _T("%08X"), pte32->th32ThreadID);
-		dwIndex = ListView_InsertItem(hwndLView, &lvItem);
+		nIndex = ListView_InsertItem(hwndLView, &lvItem);
 
-		if( dwIndex == -1 )
+		if (nIndex == -1)
 		{
 			return FALSE;
 		}
@@ -187,21 +213,21 @@ static BOOL InsertThreadItem(HWND hwndLView, THREADENTRY32* pte32)
 
 		// owner
 		wsprintf(szFmt, _T("%08X"), pte32->th32OwnerProcessID);
-		ListView_SetItemText(hwndLView, dwIndex, 1, szFmt);
+		ListView_SetItemText(hwndLView, nIndex, 1, szFmt);
 	}
 
 	// Add volatile subitems
 
 	// priority
 	wsprintf(szFmt, _T("%d"), pte32->tpBasePri);
-	ListView_SetItemText(hwndLView, dwIndex, 2, szFmt);
+	ListView_SetItemText(hwndLView, nIndex, 2, szFmt);
 
 	// affinity
 	DWORD dwAffinity;
 	if (CeGetThreadAffinity((HANDLE)pte32->th32ThreadID, &dwAffinity))
 	{
 		wsprintf(szFmt, _T("%02X"), dwAffinity);
-		ListView_SetItemText(hwndLView, dwIndex, 3, szFmt);
+		ListView_SetItemText(hwndLView, nIndex, 3, szFmt);
 	}
 
 	FILETIME ctime, etime, ktime, utime;
@@ -215,7 +241,7 @@ static BOOL InsertThreadItem(HWND hwndLView, THREADENTRY32* pte32)
 			static_cast<UINT>(reinterpret_cast<UINT64&>(ktime) / static_cast<UINT64>(1E10) % 1000),
 			static_cast<UINT>(reinterpret_cast<UINT64&>(ktime) / static_cast<UINT64>(1E07) % 1000),
 			static_cast<UINT>(reinterpret_cast<UINT64&>(ktime) / static_cast<UINT64>(1E04) % 1000));
-		ListView_SetItemText(hwndLView, dwIndex, 4, szFmt);
+		ListView_SetItemText(hwndLView, nIndex, 4, szFmt);
 		wsprintf(szFmt, _T("%u,%03u,%03u,%03u,%03u,%03u"),
 			static_cast<UINT>(reinterpret_cast<UINT64&>(utime) / static_cast<UINT64>(1E19) % 1000),
 			static_cast<UINT>(reinterpret_cast<UINT64&>(utime) / static_cast<UINT64>(1E16) % 1000),
@@ -223,8 +249,10 @@ static BOOL InsertThreadItem(HWND hwndLView, THREADENTRY32* pte32)
 			static_cast<UINT>(reinterpret_cast<UINT64&>(utime) / static_cast<UINT64>(1E10) % 1000),
 			static_cast<UINT>(reinterpret_cast<UINT64&>(utime) / static_cast<UINT64>(1E07) % 1000),
 			static_cast<UINT>(reinterpret_cast<UINT64&>(utime) / static_cast<UINT64>(1E04) % 1000));
-		ListView_SetItemText(hwndLView, dwIndex, 5, szFmt);
+		ListView_SetItemText(hwndLView, nIndex, 5, szFmt);
 	}
+
+	EnumPropsEx(hDlg, PropEnumProcEx, reinterpret_cast<LPARAM>(hwndLView));
 
 	return TRUE;
 }

@@ -1,5 +1,21 @@
-#if !defined(__ITASKMGR_H__INCLUDED_)
-#define __ITASKMGR_H__INCLUDED_
+#ifdef GlobalAddAtom
+//-----------------------------------------------------------------------------
+// Deanonymize the calling thread for https://github.com/datadiode/ITaskMgr
+// Copyright (c) datadiode - freely relicensable for use in other applications
+//-----------------------------------------------------------------------------
+inline void SetThreadName(LPCTSTR name
+, DWORD id	= ::GetCurrentThreadId()
+, HWND hwnd	= ::FindWindow(NULL, _T("ITaskMgr")))
+{
+	if (hwnd)
+	{
+		TCHAR string[256];
+		::wsprintf(string, _T("%08lX=%s"), id, name);
+		if (LPCTSTR atom = reinterpret_cast<LPCTSTR>(GlobalAddAtom(string)))
+			::SetProp(hwnd, atom, reinterpret_cast<HANDLE>(id));
+	}
+}
+#endif
 
 #define APPNAME	_T("ITaskMgr")
 #define HISTORY_MAX	512
@@ -50,5 +66,3 @@ typedef struct _ThreadPack
 LPARAM GetSelectedItemLParam(HWND hwndLView);
 void SelectItemLParam(HWND hwndLView, LPARAM lParam);
 void DeleteExcessItemsLParam(HWND hwndLView, LPARAM* plParam, int n);
-
-#endif // !defined(__ITASKMGR_H__INCLUDED_)

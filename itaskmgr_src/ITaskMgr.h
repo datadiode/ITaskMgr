@@ -4,7 +4,7 @@
 // Copyright (c) datadiode - freely relicensable for use in other applications
 //-----------------------------------------------------------------------------
 inline void SetThreadName(LPCTSTR name
-, DWORD id	= ::GetCurrentThreadId()
+, DWORD id	= ::GetCurrentThreadId() // override this to set name from outside
 , HWND hwnd	= ::FindWindow(NULL, _T("ITaskMgr")))
 {
 	if (hwnd)

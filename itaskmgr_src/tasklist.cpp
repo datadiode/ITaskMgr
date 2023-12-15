@@ -124,8 +124,10 @@ INT_PTR CALLBACK DlgProcTask(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lParam)
 	case WM_WINDOWPOSCHANGED:
 		if (((LPWINDOWPOS)lParam)->flags & (SWP_SHOWWINDOW | SWP_FRAMECHANGED))
 		{
-			HWND hwndLView = GetDlgItem(hDlg, IDC_LV_TASKLIST);
-			DrawTaskView(hwndLView);
+			if (HWND hwndLView = GetDlgItem(hDlg, IDC_LV_TASKLIST))
+			{
+				DrawTaskView(hwndLView);
+			}
 		}
 		break;
 	}

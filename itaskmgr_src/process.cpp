@@ -57,8 +57,10 @@ INT_PTR CALLBACK DlgProcProcess(HWND hDlg, UINT Msg, WPARAM wParam, LPARAM lPara
 		switch( LOWORD(wParam) )
 		{
 		case IDC_TERMINATE:
-			HWND hwndLView = GetDlgItem(hDlg, IDC_LV_PROCESS);
-			KillSelectedProcess(hwndLView);
+			if (HWND hwndLView = GetDlgItem(hDlg, IDC_LV_PROCESS))
+			{
+				KillSelectedProcess(hwndLView);
+			}
 		}
 		break;
 
